@@ -2,6 +2,7 @@
 # PySustain: Python translation of Matlab version of SuStaIn algorithm (doi:10.1101/236604)
 ###
 import numpy as np
+from scipy.stats import norm
 from matplotlib import pyplot as plt
 
 def run_sustain_algorithm(data,
@@ -629,7 +630,7 @@ def calculate_likelihood_stage_linearzscoremodel(data,
         iterative_std = np.sqrt(covnew)
         iterative_kappa = iterative_kappa*kappaval
     iterative_const = np.tile(prod(1./np.fabs(stage_a),0),(M,1))
-    cdf_diff_val = normCdf(np.tile(stage_final_tau,(M,1)),iterative_mean,iterative_std) - normCdf(np.tile(stage_initial_tau,(M,1)),iterative_mean,iterative_std)
+    cdf_diff_val = norm.cdf(np.tile(stage_final_tau,(M,1)),iterative_mean,iterative_std) - norm.cdf(np.tile(stage_initial_tau,(M,1)),iterative_mean,iterative_std)
 
     if iterative_const.shape[0]!=iterative_kappa.shape[0]:
         print('Error!')
@@ -1277,6 +1278,3 @@ def calc_exp(x,mu,sig):
 
 def normPdf(x,mu,sig):
     return calc_coeff*calc_exp
-
-def normCdf(x,mu,sig):
-    return normPdf(x,mu,sig).cumsum()
