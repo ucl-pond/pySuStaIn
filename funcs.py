@@ -15,7 +15,8 @@ def run_sustain_algorithm(data,
                           N_S_max,
                           N_iterations_MCMC,
                           likelihood_flag,
-                          output_folder,dataset_name):
+                          output_folder,
+                          dataset_name):
     ml_sequence_prev_EM = []
     ml_f_prev_EM = []
 
@@ -137,6 +138,7 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                             ml_sequence_prev,
                                                                             ml_f_prev,
                                                                             likelihood_flag)
+        ml_sequence_prev = ml_sequence_prev.reshape(ml_sequence_prev.shape[0],ml_sequence_prev.shape[1])
         p_sequence = p_sequence.reshape(p_sequence.shape[0], N_S-1)
         p_sequence_norm = p_sequence/np.tile(np.sum(p_sequence,1).reshape(len(p_sequence),1),(N_S-1))
         # Assign individuals to a subtype (cluster) based on the previous model
@@ -166,8 +168,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                 # inititialise the fitting of the next SuStaIn model in the
                 # hierarchy
                 this_seq_init = ml_sequence_prev.copy() # have to copy, otherwise changes to this_seq_init pass to ml_sequence_prev
-                this_seq_init[ix_cluster_split] = this_ml_sequence_split[0]
-                this_seq_init = np.hstack((this_seq_init.T.reshape(this_seq_init.shape[1],this_seq_init.shape[0]),this_ml_sequence_split[1])).T
+                this_seq_init[ix_cluster_split] = (this_ml_sequence_split[0]).reshape(this_ml_sequence_split.shape[1])
+                this_seq_init = np.hstack((this_seq_init.T,this_ml_sequence_split[1])).T
                 this_f_init = np.array([1.]*N_S)/float(N_S)
                 print(' + Finding ML solution from hierarchical initialisation')
                 this_ml_sequence,this_ml_f,this_ml_likelihood,this_ml_sequence_mat,this_ml_f_mat,this_ml_likelihood_mat = find_ml_mixturelinearzscoremodels(data,
@@ -183,13 +185,14 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                 # Choose the most probable SuStaIn model from the different
                 # possible SuStaIn models initialised by splitting each subtype
                 # in turn
-                if this_ml_likelihood > ml_likelihood:
-                    ml_likelihood = this_ml_likelihood
-                    ml_sequence = this_ml_sequence
-                    ml_f = this_ml_f
-                    ml_likelihood_mat = this_ml_likelihood_mat
-                    ml_sequence_mat = this_ml_sequence_mat
-                    ml_f_mat = this_ml_f_mat
+                # FIXME: these arrays have an unnecessary additional axis with size = N_startpoints - remove it further upstream
+                if this_ml_likelihood[0] > ml_likelihood:
+                    ml_likelihood = this_ml_likelihood[0]
+                    ml_sequence = this_ml_sequence[:,:,0]
+                    ml_f = this_ml_f[:,0]
+                    ml_likelihood_mat = this_ml_likelihood_mat[0]
+                    ml_sequence_mat = this_ml_sequence_mat[:,:,0]
+                    ml_f_mat = this_ml_f_mat[:,0]
                 print('- ML likelihood is',this_ml_likelihood)
             else:
                 print('Cluster',ix_cluster_split+1,'of',N_S-1,'too small for subdivision')
@@ -268,13 +271,10 @@ def find_ml_linearzscoremodel(data,
         if startpoint == (N_startpoints-1):
             terminate = 1            
         startpoint += 1
-
-    ix = np.where(ml_likelihood_mat==max(ml_likelihood_mat))
-    ix = ix[0]
+    ix = np.argmax(ml_likelihood_mat)
     ml_sequence = ml_sequence_mat[:,:,ix]
     ml_f = ml_f_mat[:,ix]
     ml_likelihood = ml_likelihood_mat[ix]
-
     return ml_sequence,ml_f,ml_likelihood,ml_sequence_mat,ml_f_mat,ml_likelihood_mat
 
 def initialise_sequence_linearzscoremodel(stage_zscore,stage_biomarker_index):
@@ -331,7 +331,7 @@ def perform_em_mixturelinearzscoremodels(data,
                                          current_f,
                                          likelihood_flag):
     # Perform an E-M procedure to estimate parameters of SuStaIn model
-    MaxIter = 100
+    MaxIter = 2
     
     N = stage_zscore.shape[1]
     N_S = current_sequence.shape[0]
@@ -367,7 +367,7 @@ def perform_em_mixturelinearzscoremodels(data,
                                                                                                              likelihood_flag)
         HAS_converged = np.fabs((candidate_likelihood-current_likelihood)/max(candidate_likelihood,current_likelihood)) < 1e-6
         if HAS_converged:
-            print('EM converged in',iteration,'iterations')
+            print('EM converged in',iteration+1,'iterations')
             terminate = 1
         else:
             if candidate_likelihood > current_likelihood:
@@ -384,7 +384,6 @@ def perform_em_mixturelinearzscoremodels(data,
     ml_sequence = current_sequence
     ml_f = current_f
     ml_likelihood = current_likelihood
-
     return ml_sequence,ml_f,ml_likelihood,samples_sequence,samples_f,samples_likelihood
 
 def calculate_likelihood_mixturelinearzscoremodels(data,
@@ -540,6 +539,7 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
         x = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
         p_perm_k[:,j] = coeff+np.sum(factor-.5*x*x,1)
     p_perm_k = np.exp(p_perm_k)
+
     return p_perm_k
 
 def calculate_likelihood_stage_linearzscoremodel(data,
@@ -1052,7 +1052,7 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                      f_init,
                                                      likelihood_flag):
     # Optimise the perturbation size for the MCMC algorithm
-    n_iterations_MCMC_optimisation = int(1e4) # FIXME: set externally
+    n_iterations_MCMC_optimisation = int(1e1) # FIXME: set externally
     n_passes_optimisation = 3
 
     seq_sigma_currentpass = 1
@@ -1113,10 +1113,8 @@ def perform_mcmc_mixturelinearzscoremodels(data,
     samples_sequence = np.zeros((N_S,N,n_iterations))
     samples_f = np.zeros((N_S,n_iterations))
     samples_likelihood = np.zeros((n_iterations,1))
-    
-    seq_init = seq_init.reshape(seq_init.shape[0], seq_init.shape[1],)
-    
-    samples_sequence[:,:,0] = seq_init
+    print seq_init.shape, samples_sequence.shape
+    samples_sequence[:,:,0] = seq_init.reshape(seq_init.shape[0],seq_init.shape[1])
     f_init = np.array(f_init).reshape(f_init.shape[0])
     samples_f[:,0] = f_init
 

@@ -41,9 +41,9 @@ def main():
                                                              min_biomarker_zscore,max_biomarker_zscore,
                                                              std_biomarker_zscore,stage_zscore,
                                                              stage_biomarker_index)
-    N_startpoints = 1
+    N_startpoints = 25
     N_S_max = 3
-    N_iterations_MCMC = int(1e6)
+    N_iterations_MCMC = int(1e1)
     likelihood_flag = 'Exact'
     output_folder = 'simulateddataResults'
     dataset_name = 'simulateddata'
