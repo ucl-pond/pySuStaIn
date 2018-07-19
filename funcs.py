@@ -340,7 +340,7 @@ def perform_em_mixturelinearzscoremodels(data,
                                          current_f,
                                          likelihood_flag):
     # Perform an E-M procedure to estimate parameters of SuStaIn model
-    MaxIter = 2
+    MaxIter = 100
     
     N = stage_zscore.shape[1]
     N_S = current_sequence.shape[0]
@@ -1061,7 +1061,7 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                      f_init,
                                                      likelihood_flag):
     # Optimise the perturbation size for the MCMC algorithm
-    n_iterations_MCMC_optimisation = int(1e2) # FIXME: set externally
+    n_iterations_MCMC_optimisation = int(1e4) # FIXME: set externally
     n_passes_optimisation = 3
 
     seq_sigma_currentpass = 1
