@@ -57,7 +57,7 @@ def run_sustain_algorithm(data,
                                      stage_biomarker_index,
                                      N_S_max)
         ax0.plot(range(N_iterations_MCMC),samples_likelihood)
-        with open('./results/results_subtype_'+str(s)+'.csv', 'wb') as f:
+        with open('./results_subtype_'+str(s)+'.csv', 'wb') as f:
             writer = csv.writer(f)
             writer.writerows(samples_sequence)
             writer.writerows(samples_f)
