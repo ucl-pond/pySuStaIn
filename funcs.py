@@ -5,6 +5,7 @@ import numpy as np
 from scipy.stats import norm
 from matplotlib import pyplot as plt
 import csv
+import os
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
@@ -55,16 +56,11 @@ def run_sustain_algorithm(data,
                                      biomarker_labels,
                                      stage_zscore,
                                      stage_biomarker_index,
-                                     N_S_max)
+                                     N_S_max,
+                                     output_folder,
+                                     dataset_name,
+                                     s)
         ax0.plot(range(N_iterations_MCMC),samples_likelihood)
-        with open('./results_subtype_'+str(s)+'.csv', 'wb') as f:
-            writer = csv.writer(f)
-            writer.writerows(samples_sequence)
-            writer.writerows(samples_f)
-            writer.writerows(biomarker_labels.reshape(1,len(biomarker_labels)))
-            writer.writerows(stage_zscore)
-            writer.writerows(stage_biomarker_index)
-            writer.writerow([N_S_max])
     plt.show()
 
 def estimate_ml_sustain_model_nplus1_clusters(data,
@@ -1217,7 +1213,10 @@ def plot_sustain_model(samples_sequence,
                        biomarker_labels,
                        stage_zscore,
                        stage_biomarker_index,
-                       N_z):
+                       N_z,
+                       output_folder,
+                       dataset_name,
+                       subtype):
     colour_mat = np.array([[1,0,0],[1,0,1],[0,0,1]])
     temp_mean_f = np.mean(samples_f,1)
     vals = np.sort(temp_mean_f)[::-1]
@@ -1273,6 +1272,17 @@ def plot_sustain_model(samples_sequence,
             ax.set_xlabel('Event position', fontsize=20)
             ax.set_title('Group '+str(i)+' f='+str(vals[i]))
     plt.tight_layout()
+    # write results            
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    with open(output_folder+'/'+dataset_name+'_subtype'+str(subtype)+'.csv', 'wb') as f:
+        writer = csv.writer(f)
+        writer.writerows(samples_sequence)
+        writer.writerows(samples_f)
+        writer.writerows(biomarker_labels.reshape(1,len(biomarker_labels)))
+        writer.writerows(stage_zscore)
+        writer.writerows(stage_biomarker_index)
+        writer.writerow([N_z])
     return fig, ax
 
 def calc_coeff(sig):
