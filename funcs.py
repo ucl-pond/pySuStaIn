@@ -4,6 +4,7 @@
 import numpy as np
 from scipy.stats import norm
 from matplotlib import pyplot as plt
+import csv
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
@@ -47,8 +48,8 @@ def run_sustain_algorithm(data,
     
         ml_sequence_prev_EM = ml_sequence_EM
         ml_f_prev_EM = ml_f_EM
-
-        biomarker_labels = np.arange(data.shape[1])
+        # plot and write results
+        biomarker_labels = np.array([str(x) for x in range(data.shape[1])])
         fig, ax = plot_sustain_model(samples_sequence,
                                      samples_f,
                                      biomarker_labels,
@@ -56,6 +57,14 @@ def run_sustain_algorithm(data,
                                      stage_biomarker_index,
                                      N_S_max)
         ax0.plot(range(N_iterations_MCMC),samples_likelihood)
+        with open('./results/results_subtype_'+str(s)+'.csv', 'wb') as f:
+            writer = csv.writer(f)
+            writer.writerows(samples_sequence)
+            writer.writerows(samples_f)
+            writer.writerows(biomarker_labels.reshape(1,len(biomarker_labels)))
+            writer.writerows(stage_zscore)
+            writer.writerows(stage_biomarker_index)
+            writer.writerow([N_S_max])
     plt.show()
 
 def estimate_ml_sustain_model_nplus1_clusters(data,
@@ -1052,7 +1061,7 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                      f_init,
                                                      likelihood_flag):
     # Optimise the perturbation size for the MCMC algorithm
-    n_iterations_MCMC_optimisation = int(1e1) # FIXME: set externally
+    n_iterations_MCMC_optimisation = int(1e2) # FIXME: set externally
     n_passes_optimisation = 3
 
     seq_sigma_currentpass = 1
@@ -1113,7 +1122,6 @@ def perform_mcmc_mixturelinearzscoremodels(data,
     samples_sequence = np.zeros((N_S,N,n_iterations))
     samples_f = np.zeros((N_S,n_iterations))
     samples_likelihood = np.zeros((n_iterations,1))
-    print seq_init.shape, samples_sequence.shape
     samples_sequence[:,:,0] = seq_init.reshape(seq_init.shape[0],seq_init.shape[1])
     f_init = np.array(f_init).reshape(f_init.shape[0])
     samples_f[:,0] = f_init
