@@ -1275,7 +1275,7 @@ def plot_sustain_model(samples_sequence,
     # write results            
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-    with open(output_folder+'/'+dataset_name+'_subtype'+str(subtype)+'.csv', 'wb') as f:
+    with open(output_folder+'/'+dataset_name+'_subtype'+str(subtype)+'.csv', 'w') as f:
         writer = csv.writer(f)
         writer.writerows(samples_sequence)
         writer.writerows(samples_f)
