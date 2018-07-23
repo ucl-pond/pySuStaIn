@@ -150,8 +150,7 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
         ml_cluster_subj = np.zeros((len(data),1))
         for m in range(len(data)):
             ix = np.argmax(p_sequence_norm[m,:])+1
-            #            ml_cluster_subj[m] = ix # FIXME: should check this always works, as it differs to the Matlab code, which treats ix as an array
-            ml_cluster_subj[m] = ix*np.ceil(np.random.rand()) # FIXME: hack to get rand called same number of times as in Matlab code
+            ml_cluster_subj[m] = ix # FIXME: should check this always works, as it differs to the Matlab code, which treats ix as an array
             
         ml_likelihood = -np.inf
         for ix_cluster_split in range(N_S-1):
@@ -199,7 +198,7 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                     ml_likelihood_mat = this_ml_likelihood_mat[0]
                     ml_sequence_mat = this_ml_sequence_mat[:,:,0]
                     ml_f_mat = this_ml_f_mat[:,0]
-                print('- ML likelihood is',this_ml_likelihood)
+                print('- ML likelihood is',this_ml_likelihood[0])
             else:
                 print('Cluster',ix_cluster_split+1,'of',N_S-1,'too small for subdivision')
         print('Overall ML likelihood is',ml_likelihood)
@@ -691,11 +690,9 @@ def optimise_parameters_mixturelinearzscoremodels(data,
     f_opt = (np.squeeze(sum(sum(p_perm_k_norm)))/sum(sum(sum(p_perm_k_norm)))).reshape(N_S,1,1)
     f_val_mat = np.tile(f_opt,(1, N+1, M))
     f_val_mat = np.transpose(f_val_mat,(2, 1, 0))
-    #    order_seq = np.random.permutation(N_S) # this will produce different random numbers to Matlab
-    order_seq = np.arange(N_S) # HACK
+    order_seq = np.random.permutation(N_S) # this will produce different random numbers to Matlab
     for s in order_seq:
-        #        order_bio = np.random.permutation(N) # this will produce different random numbers to Matlab
-        order_bio = np.arange(N) # HACK
+        order_bio = np.random.permutation(N) # this will produce different random numbers to Matlab
         for i in order_bio:
             current_sequence = S_opt[s]
             current_location = np.array([0]*len(current_sequence))
@@ -1129,8 +1126,7 @@ def perform_mcmc_mixturelinearzscoremodels(data,
         if i%(n_iterations/10)==0:
             print('Iteration',i,'of',n_iterations,',',int(float(i)/float(n_iterations)*100.),'% complete')
         if i>0:
-            #            seq_order = np.random.permutation(N_S) # this function returns different random numbers to Matlab
-            seq_order = np.arange(N_S) # HACK
+            seq_order = np.random.permutation(N_S) # this function returns different random numbers to Matlab
             for s in seq_order:
                 move_event_from = int(np.ceil(N*np.random.rand()))-1
                 current_sequence = samples_sequence[s,:,i-1]
@@ -1182,8 +1178,7 @@ def perform_mcmc_mixturelinearzscoremodels(data,
                 new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to,N-1)]])            
                 samples_sequence[s,:,i] = new_sequence
                 
-            #            new_f = samples_f[:,i-1].reshape(N_S,1) + f_sigma*np.random.randn()
-            new_f = samples_f[:,i-1].reshape(N_S,1) + f_sigma*norm.ppf(np.random.rand(1,N_S).T) # HACK
+            new_f = samples_f[:,i-1].reshape(N_S,1) + f_sigma*np.random.randn()
             new_f = (np.fabs(new_f)/sum(np.fabs(new_f))).reshape(N_S)
                 
             samples_f[:,i] = new_f
