@@ -35,7 +35,8 @@ def generate_data_sustain(subtypes,stages,gt_ordering,min_biomarker_zscore,
     for m in range(M):
         data_denoised[m,:] = stage_value[:,int(stages[m]),subtypes[m]-1]
 
-    data = data_denoised + [x*y for x,y in zip(np.random.randn(M,B),np.array([[x]*M for x in std_biomarker_zscore]).T)] # this will produce different random numbers to Matlab
+    #    data = data_denoised + [x*y for x,y in zip(np.random.randn(M,B),np.array([[x]*M for x in std_biomarker_zscore]).T)] # this will produce different random numbers to Matlab
+    data = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1)) # HACK
     return data, data_denoised, stage_value
 
 def generate_random_sustain_model(stage_zscore, stage_biomarker_index, N_S):
