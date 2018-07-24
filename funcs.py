@@ -1169,8 +1169,7 @@ def perform_mcmc_mixturelinearzscoremodels(data,
                 # use own normal PDF because stats.norm is slow
                 weight = calc_coeff(this_seq_sigma)*calc_exp(distance,0.,this_seq_sigma)
                 weight /= sum(weight)
-                #                index = np.random.choice(range(len(possible_positions)),1,replace=True,p=weight)
-                index = 0
+                index = np.random.choice(range(len(possible_positions)),1,replace=True,p=weight)
             
                 move_event_to = possible_positions[index]
             
