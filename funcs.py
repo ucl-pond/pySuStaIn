@@ -59,8 +59,10 @@ def run_sustain_algorithm(data,
                                      N_S_max,
                                      output_folder,
                                      dataset_name,
-                                     s)
+                                     s,
+                                     samples_likelihood)
         ax0.plot(range(N_iterations_MCMC),samples_likelihood)
+
     plt.show()
 
 def estimate_ml_sustain_model_nplus1_clusters(data,
@@ -172,7 +174,7 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                 # Use the two subtype model combined with the other subtypes to
                 # inititialise the fitting of the next SuStaIn model in the
                 # hierarchy
-                this_seq_init = ml_sequence_prev.copy() # have to copy, otherwise changes to this_seq_init pass to ml_sequence_prev
+                this_seq_init = ml_sequence_prev.copy() # have to copy or changes will be passed to ml_sequence_prev
                 this_seq_init[ix_cluster_split] = (this_ml_sequence_split[0]).reshape(this_ml_sequence_split.shape[1])
                 this_seq_init = np.hstack((this_seq_init.T,this_ml_sequence_split[1])).T
                 this_f_init = np.array([1.]*N_S)/float(N_S)
@@ -699,8 +701,8 @@ def optimise_parameters_mixturelinearzscoremodels(data,
             current_location[current_sequence.astype(int)] = np.arange(len(current_sequence))                    
             selected_event = i
             move_event_from = current_location[selected_event]
-            this_stage_zscore = stage_zscore[0][selected_event]
-            selected_biomarker = stage_biomarker_index[0][selected_event]
+            this_stage_zscore = stage_zscore[0,selected_event]
+            selected_biomarker = stage_biomarker_index[0,selected_event]
             possible_zscores_biomarker = stage_zscore[stage_biomarker_index==selected_biomarker]
             # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
             min_filter = possible_zscores_biomarker<this_stage_zscore
@@ -754,7 +756,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                 total_prob_subj = np.sum(total_prob_stage,1)
                 possible_likelihood[index] = sum(np.log(total_prob_subj+1e-250))
 
-            possible_likelihood = possible_likelihood.reshape(possible_likelihood.shape[0],)
+            possible_likelihood = possible_likelihood.reshape(possible_likelihood.shape[0])
             max_likelihood = max(possible_likelihood)
             this_S = possible_sequences[possible_likelihood==max_likelihood,:]
             this_S = this_S[0,:]
@@ -1061,7 +1063,7 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
     n_passes_optimisation = 3
 
     seq_sigma_currentpass = 1
-    f_sigma_currentpass = 0.01
+    f_sigma_currentpass = 0.01 # magic number
 
     N_S = seq_init.shape[0]
     
@@ -1085,9 +1087,9 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                 temp_inv = np.array([0]*samples_sequence_currentpass.shape[1])
                 temp_inv[temp_seq.astype(int)] = np.arange(samples_sequence_currentpass.shape[1])
                 samples_position_currentpass[s,:,sample] = temp_inv
-        seq_sigma_currentpass = np.std(samples_position_currentpass,2)
+        seq_sigma_currentpass = np.std(samples_position_currentpass,axis=2,ddof=1) # np.std is different to Matlab std, which normalises to N-1 by default
         seq_sigma_currentpass[seq_sigma_currentpass<0.01] = 0.01 # magic number
-        f_sigma_currentpass = np.std(samples_f_currentpass,1)
+        f_sigma_currentpass = np.std(samples_f_currentpass,axis=1,ddof=1) # np.std is different to Matlab std, which normalises to N-1 by default
 
     seq_sigma_opt = seq_sigma_currentpass
     f_sigma_opt = f_sigma_currentpass
@@ -1112,16 +1114,13 @@ def perform_mcmc_mixturelinearzscoremodels(data,
 
     if isinstance(f_sigma,float): # FIXME: hack to enable multiplication
         f_sigma = np.array([f_sigma])
-    if f_sigma.shape[0] > 1:
-        f_sigma = f_sigma.reshape(f_sigma.shape[0],1)
     
     samples_sequence = np.zeros((N_S,N,n_iterations))
     samples_f = np.zeros((N_S,n_iterations))
     samples_likelihood = np.zeros((n_iterations,1))
-    samples_sequence[:,:,0] = seq_init.reshape(seq_init.shape[0],seq_init.shape[1])
-    f_init = np.array(f_init).reshape(f_init.shape[0])
+    samples_sequence[:,:,0] = seq_init # don't need to copy as we don't write to 0 index
     samples_f[:,0] = f_init
-
+    
     for i in range(n_iterations):
         if i%(n_iterations/10)==0:
             print('Iteration',i,'of',n_iterations,',',int(float(i)/float(n_iterations)*100.),'% complete')
@@ -1132,11 +1131,9 @@ def perform_mcmc_mixturelinearzscoremodels(data,
                 current_sequence = samples_sequence[s,:,i-1]
                 current_location = np.array([0]*N)
                 current_location[current_sequence.astype(int)] = np.arange(N)
-            
                 selected_event = int(current_sequence[move_event_from])
-            
-                this_stage_zscore = stage_zscore[0][selected_event]
-                selected_biomarker = stage_biomarker_index[0][selected_event]
+                this_stage_zscore = stage_zscore[0,selected_event]
+                selected_biomarker = stage_biomarker_index[0,selected_event]
                 possible_zscores_biomarker = stage_zscore[stage_biomarker_index==selected_biomarker]
                 # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
                 min_filter = possible_zscores_biomarker<this_stage_zscore
@@ -1160,28 +1157,26 @@ def perform_mcmc_mixturelinearzscoremodels(data,
                 else:
                     possible_positions = np.arange(move_event_to_lower_bound,move_event_to_upper_bound)
                     
-                distance = np.array(possible_positions-move_event_from)
+                distance = possible_positions-move_event_from
                 
-                if isinstance(seq_sigma, int): # FIXME: necessary conditional check?
+                if isinstance(seq_sigma, int): #FIXME: change to float
                     this_seq_sigma = seq_sigma
                 else:
                     this_seq_sigma = seq_sigma[s,selected_event]
                 # use own normal PDF because stats.norm is slow
                 weight = calc_coeff(this_seq_sigma)*calc_exp(distance,0.,this_seq_sigma)
-                weight /= sum(weight)
-                index = np.random.choice(range(len(possible_positions)),1,replace=True,p=weight)
-            
+                weight /= np.sum(weight)
+                index = np.random.choice(range(len(possible_positions)),1,replace=True,p=weight) # FIXME: difficult to check this because random.choice is different to Matlab randsample
+                
                 move_event_to = possible_positions[index]
             
                 current_sequence = np.delete(current_sequence,move_event_from,0)
-                new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to,N-1)]])            
+                new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to,N-1)]])
                 samples_sequence[s,:,i] = new_sequence
                 
-            new_f = samples_f[:,i-1].reshape(N_S,1) + f_sigma*np.random.randn()
-            new_f = (np.fabs(new_f)/sum(np.fabs(new_f))).reshape(N_S)
-                
+            new_f = samples_f[:,i-1] + f_sigma*np.random.randn()
+            new_f = (np.fabs(new_f)/np.sum(np.fabs(new_f)))
             samples_f[:,i] = new_f
-
         S = samples_sequence[:,:,i]
         f = samples_f[:,i]
         likelihood_sample,_,_,_,_ = calculate_likelihood_mixturelinearzscoremodels(data,
@@ -1216,16 +1211,17 @@ def plot_sustain_model(samples_sequence,
                        N_z,
                        output_folder,
                        dataset_name,
-                       subtype):
+                       subtype,
+                       samples_likelihood):
     colour_mat = np.array([[1,0,0],[1,0,1],[0,0,1]])
     temp_mean_f = np.mean(samples_f,1)
     vals = np.sort(temp_mean_f)[::-1]
-    vals = np.array([round(x*100.) for x in vals])/100.
+    vals = np.array([np.round(x*100.) for x in vals])/100.
     ix = np.argsort(temp_mean_f)[::-1]
     N_S = samples_sequence.shape[0]
     N_bio = len(biomarker_labels)
     if N_S > 1:
-        fig, ax = plt.subplots(N_S,1)
+        fig, ax = plt.subplots(1,N_S)
     else:
         fig, ax = plt.subplots()    
     for i in range(N_S):
@@ -1283,6 +1279,7 @@ def plot_sustain_model(samples_sequence,
         writer.writerows(stage_zscore)
         writer.writerows(stage_biomarker_index)
         writer.writerow([N_z])
+        writer.writerow(samples_likelihood)
     return fig, ax
 
 def calc_coeff(sig):

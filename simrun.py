@@ -37,9 +37,13 @@ def main():
     subtypes = np.random.choice(range(N_S_gt),M,replace=True,p=gt_f)
     stages = np.ceil(np.random.rand(M,1)*(N_k_gt+1))-1
 
-    data, data_denoised, stage_value = generate_data_sustain(subtypes,stages,gt_sequence,
-                                                             min_biomarker_zscore,max_biomarker_zscore,
-                                                             std_biomarker_zscore,stage_zscore,
+    data, data_denoised, stage_value = generate_data_sustain(subtypes,
+                                                             stages,
+                                                             gt_sequence,
+                                                             min_biomarker_zscore,
+                                                             max_biomarker_zscore,
+                                                             std_biomarker_zscore,
+                                                             stage_zscore,
                                                              stage_biomarker_index)
     N_startpoints = 25
     N_S_max = 3
