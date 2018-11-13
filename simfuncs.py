@@ -1,5 +1,6 @@
 ###
 # PySustain: Python translation of Matlab version of SuStaIn algorithm (doi:10.1101/236604)
+# Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 ###
 import numpy as np
 from scipy.stats import norm
