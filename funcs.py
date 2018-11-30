@@ -7,6 +7,7 @@ from scipy.stats import norm
 from matplotlib import pyplot as plt
 import csv
 import os
+from sklearn.model_selection import KFold, StratifiedKFold
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
@@ -63,8 +64,7 @@ def run_sustain_algorithm(data,
                                      s,
                                      samples_likelihood)
         ax0.plot(range(N_iterations_MCMC),samples_likelihood)
-
-    plt.show()
+    return samples_sequence, samples_f
 
 def estimate_ml_sustain_model_nplus1_clusters(data,
                                               min_biomarker_zscore,
@@ -1213,7 +1213,8 @@ def plot_sustain_model(samples_sequence,
                        output_folder,
                        dataset_name,
                        subtype,
-                       samples_likelihood):
+                       samples_likelihood,
+                       cval=False):
     colour_mat = np.array([[1,0,0],[1,0,1],[0,0,1]])
     temp_mean_f = np.mean(samples_f,1)
     vals = np.sort(temp_mean_f)[::-1]
@@ -1269,6 +1270,8 @@ def plot_sustain_model(samples_sequence,
             ax.set_xlabel('Event position', fontsize=20)
             ax.set_title('Group '+str(i)+' f='+str(vals[i]))
     plt.tight_layout()
+    if cval:
+        fig.suptitle('Cross validation')
     # write results            
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -1282,6 +1285,160 @@ def plot_sustain_model(samples_sequence,
         writer.writerow([N_z])
         writer.writerow(samples_likelihood)
     return fig, ax
+
+def cross_validate_sustain_model(data,
+                                 test_idxs,
+                                 min_biomarker_zscore,
+                                 max_biomarker_zscore,
+                                 std_biomarker_zscore,
+                                 stage_zscore,
+                                 stage_biomarker_index,
+                                 N_startpoints,
+                                 N_S_max,
+                                 N_iterations_MCMC,
+                                 likelihood_flag,
+                                 output_folder,
+                                 dataset_name,
+                                 select_fold,
+                                 target):
+    # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
+    # and MCMC) on a training dataset and evaluating the model likelihood on a test
+    # dataset. 'data_fold' should specify the membership of each data point to a
+    # test fold. Use a specific index of variable 'select_fold' to just run for a
+    # single fold (allows the cross-validation to be run in parallel), or leave
+    # the variable 'select_fold' empty to iterate across folds sequentially.
+    if not test_idxs:
+        print('!!!CAUTION!!! No user input for cross-validation fold selection - using automated stratification. Only do this if you know what you are doing!')
+        N_folds = 10
+        if target:
+            cv = StratifiedKFold(n_splits=N_folds,shuffle=True)
+            cv_it = cv.split(data,target)
+        else:
+            cv = KFold(n_splits=N_folds,shuffle=True)
+            cv_it = cv.split(data)
+        for train, test in cv_it:
+            test_idxs.append(test)
+        test_idxs = np.array(test_idxs)
+    
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    if select_fold:
+        test_idxs = test_idxs[select_fold]
+    Nfolds = len(test_idxs)
+    
+    for fold in range(Nfolds):
+        #        print('Cross-validating fold',fold,'of',Nfolds,'with index',test_idxs[fold])
+        data_train = data[np.array([x for x in range(data.shape[0]) if x not in test_idxs[fold]])]
+        data_test = data[test_idxs[fold]]
+        ml_sequence_prev_EM = []
+        ml_f_prev_EM = []
+        samples_sequence_cval = []
+        samples_f_cval = []
+        for s in range(N_S_max):
+            ml_sequence_EM,ml_f_EM,ml_likelihood_EM,ml_sequence_mat_EM,ml_f_mat_EM,ml_likelihood_mat_EM = estimate_ml_sustain_model_nplus1_clusters(data_train,
+                                                                                                                                                    min_biomarker_zscore,
+                                                                                                                                                    max_biomarker_zscore,
+                                                                                                                                                    std_biomarker_zscore,
+                                                                                                                                                    stage_zscore,
+                                                                                                                                                    stage_biomarker_index,
+                                                                                                                                                    ml_sequence_prev_EM,
+                                                                                                                                                    ml_f_prev_EM,
+                                                                                                                                                    N_startpoints,
+                                                                                                                                                    likelihood_flag)
+            with open(output_folder+'/'+dataset_name+'_EM_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
+                writer = csv.writer(f)
+                writer.writerows(ml_sequence_EM)
+                writer.writerow([ml_likelihood_EM])
+                writer.writerows(ml_sequence_mat_EM)
+                writer.writerow([ml_f_mat_EM])
+                writer.writerow([ml_likelihood_mat_EM])
+            seq_init = ml_sequence_EM
+            f_init = ml_f_EM
+            ml_sequence,ml_f,ml_likelihood,samples_sequence,samples_f,samples_likelihood = estimate_uncertainty_sustain_model(data_train,
+                                                                                                                              min_biomarker_zscore,
+                                                                                                                              max_biomarker_zscore,
+                                                                                                                              std_biomarker_zscore,
+                                                                                                                              stage_zscore,
+                                                                                                                              stage_biomarker_index,
+                                                                                                                              seq_init,
+                                                                                                                              f_init,
+                                                                                                                              N_iterations_MCMC,
+                                                                                                                              likelihood_flag)
+            with open(output_folder+'/'+dataset_name+'_MCMC_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
+                writer = csv.writer(f)
+                writer.writerows(ml_sequence)
+                writer.writerows(ml_f)
+                writer.writerow([ml_likelihood])
+                writer.writerows(samples_sequence)
+                writer.writerows(samples_f)
+                writer.writerows(samples_likelihood)
+            samples_likelihood_subj_test = evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data_test,
+                                                                                                      samples_sequence,
+                                                                                                      samples_f,
+                                                                                                      min_biomarker_zscore,
+                                                                                                      max_biomarker_zscore,
+                                                                                                      std_biomarker_zscore,
+                                                                                                      stage_zscore,
+                                                                                                      stage_biomarker_index,
+                                                                                                      likelihood_flag)
+            with open(output_folder+'/'+dataset_name+'_OutOfSampleLikelihood_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
+                writer = csv.writer(f)
+                writer.writerows(samples_likelihood_subj_test)
+                
+            ml_sequence_prev_EM = ml_sequence_EM
+            ml_f_prev_EM = ml_f_EM
+            samples_sequence_cval += list(samples_sequence)
+            samples_f_cval += list(samples_f)
+    """
+    ###
+    # UNDER CONSTRUCTION
+    ###
+    samples_sequence_cval = np.array(samples_sequence_cval)
+    samples_f_cval = np.array(samples_f_cval)
+    biomarker_labels = np.array([str(x) for x in range(data.shape[1])])
+    fig, ax = plot_sustain_model(samples_sequence_cval,
+                                 samples_f_cval,
+                                 biomarker_labels,
+                                 stage_zscore,
+                                 stage_biomarker_index,
+                                 N_S_max,
+                                 output_folder,
+                                 dataset_name,
+                                 s,
+                                 samples_likelihood,
+                                 cval=True)
+    """
+
+def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
+                                                               samples_sequence,
+                                                               samples_f,
+                                                               min_biomarker_zscore,
+                                                               max_biomarker_zscore,
+                                                               std_biomarker_zscore,
+                                                               stage_zscore,
+                                                               stage_biomarker_index,
+                                                               likelihood_flag):
+    # Take MCMC samples of the uncertainty in the SuStaIn model parameters
+    M = data.shape[0]
+    n_iterations = samples_sequence.shape[2]
+    samples_likelihood_subj = np.zeros((M,n_iterations))    
+    for i in range(n_iterations):
+        #        if i%(n_iterations/10)==0:
+        #            print('Iteration',i,'of',n_iterations,',',float(i)/float(n_iterations)*100.,'% complete')
+        S = samples_sequence[:,:,i]
+        f = samples_f[:,i]
+        _,likelihood_sample_subj,_,_,_ = calculate_likelihood_mixturelinearzscoremodels(data,
+                                                                                        min_biomarker_zscore,max_biomarker_zscore,
+                                                                                        std_biomarker_zscore,
+                                                                                        stage_zscore,
+                                                                                        stage_biomarker_index,
+                                                                                        S,
+                                                                                        f,
+                                                                                        likelihood_flag)        
+        samples_likelihood_subj[:,i] = likelihood_sample_subj
+        
+    return samples_likelihood_subj
 
 def calc_coeff(sig):
     return 1./np.sqrt(np.pi*2.0)*sig

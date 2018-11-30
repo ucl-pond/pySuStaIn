@@ -3,11 +3,14 @@
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 ###
 import numpy as np
+from matplotlib import pyplot as plt
 from simfuncs import generate_random_sustain_model, generate_data_sustain
-from funcs import run_sustain_algorithm
+from funcs import run_sustain_algorithm, cross_validate_sustain_model
 
 def main():
 
+    validate = True
+    
     N = 10
     M = 500
     N_S_gt = 1
@@ -52,18 +55,46 @@ def main():
     likelihood_flag = 'Exact'
     output_folder = 'simulateddataResults'
     dataset_name = 'simulateddata'
-    run_sustain_algorithm(data,
-                          min_biomarker_zscore,
-                          max_biomarker_zscore,
-                          std_biomarker_zscore,
-                          stage_zscore,
-                          stage_biomarker_index,
-                          N_startpoints,
-                          N_S_max,
-                          N_iterations_MCMC,
-                          likelihood_flag,
-                          output_folder,
-                          dataset_name)
+    samples_sequence, samples_f = run_sustain_algorithm(data,
+                                                        min_biomarker_zscore,
+                                                        max_biomarker_zscore,
+                                                        std_biomarker_zscore,
+                                                        stage_zscore,
+                                                        stage_biomarker_index,
+                                                        N_startpoints,
+                                                        N_S_max,
+                                                        N_iterations_MCMC,
+                                                        likelihood_flag,
+                                                        output_folder,
+                                                        dataset_name)
+
+    if validate:
+        ### USER DEFINED INPUT: START
+        # test_idxs: indices corresponding to 'data' for test set, with shape (N_folds, data.shape[0]/N_folds)
+        # select_fold: index of a single fold from 'test_idxs'. For use if this code was to be run on multiple processors
+        # target: stratification is done based on the labels provided here. For use with sklearn method 'StratifiedKFold'
+        test_idxs = []
+        select_fold = []
+        target = []
+        ### USER DEFINED INPUT: END
+                
+        cross_validate_sustain_model(data,
+                                     test_idxs,
+                                     min_biomarker_zscore,
+                                     max_biomarker_zscore,
+                                     std_biomarker_zscore,
+                                     stage_zscore,
+                                     stage_biomarker_index,
+                                     N_startpoints,
+                                     N_S_max,
+                                     N_iterations_MCMC,
+                                     likelihood_flag,
+                                     output_folder,
+                                     dataset_name,
+                                     select_fold,
+                                     target)
+
+    plt.show()
 
 if __name__ == '__main__':
     np.random.seed(42)
