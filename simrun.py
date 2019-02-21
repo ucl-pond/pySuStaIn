@@ -33,7 +33,6 @@ def main():
         SuStaInStageLabels.append('B'+str(stage_biomarker_index[i])+' - Z'+str(stage_zscore[i]))
     gt_f = [1] + [0.5*x for x in range(N_S_gt-1)]
     gt_f = [x/sum(gt_f) for x in gt_f][::-1]
-    print( gt_f )
     gt_sequence = generate_random_sustain_model(stage_zscore,stage_biomarker_index,N_S_gt)
     N_k_gt = np.array(stage_zscore).shape[1]+1
 
@@ -49,7 +48,7 @@ def main():
                                                              stage_zscore,
                                                              stage_biomarker_index)
     N_startpoints = 25
-    N_S_max = 3
+    N_S_max = 3 #maximum number of subtypes 
     N_iterations_MCMC = int(1e6)
     likelihood_flag = 'Exact'
     output_folder = 'simulateddataResults'
