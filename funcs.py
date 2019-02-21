@@ -21,6 +21,22 @@ def run_sustain_algorithm(data,
                           likelihood_flag,
                           output_folder,
                           dataset_name):
+    '''
+    Inputs:
+    ======
+    data: 
+    min_biomarker_zscore:
+    max_biomarker_zscore:
+    std_biomarker_zscore:
+    stage_zscore:
+    stage_biomarker_index:
+    N_startpoints:
+    N_S_max
+    N_iterations_MCMC
+    likelihood_flag
+    output_folder
+    dataset_name
+    '''
     ml_sequence_prev_EM = []
     ml_f_prev_EM = []
 
@@ -76,50 +92,56 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                               ml_f_prev,
                                               N_startpoints,
                                               likelihood_flag):
-    # Given the previous SuStaIn model, estimate the next model in the
-    # hierarchy (i.e. number of subtypes goes from N to N+1)
-    #
-    #INPUTS: 
-    # data - !important! needs to be (positive) z-scores! 
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # ml_sequence_prev - the ordering of the stages for each subtype from the
-    # previous SuStaIn model
-    #   dim: number of subtypes x number of z-score stages
-    # ml_f_prev - the proportion of individuals belonging to each subtype from
-    # the previous SuStaIn model
-    #   dim: number of subtypes x 1
-    # N_startpoints - the number of start points for the fitting
-    # likelihood_flag - whether to use an exact method of inference - when set
-    # to 'Exact', the exact method is used, the approximate method is used for
-    # all other settings
-    #
-    #OUTPUTS:
-    # ml_sequence - the ordering of the stages for each subtype for the next
-    # SuStaIn model in the hierarchy
-    # ml_f - the most probable proportion of individuals belonging to each
-    # subtype for the next SuStaIn model in the hierarchy
-    # ml_likelihood - the likelihood of the most probable SuStaIn model for the
-    # next SuStaIn model in the hierarchy
-    # previous outputs _mat - same as before but for each start point
+    '''
+    Given the previous SuStaIn model, estimate the next model in the
+    hierarchy (i.e. number of subtypes goes from N to N+1)
+    
+    Inputs: 
+    =======
+
+    data: *important* needs to be (positive) z-scores! 
+        dimension: number of subjects x number of biomarkers
+    min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
+    for all markers)
+    dim: 1 x number of biomarkers
+    max_biomarker_zscore - a maximum z-score for each biomarker - reached at
+    the final stage of the linear z-score model
+      dim: 1 x number of biomarkers
+    std_biomarker_zscore - the standard devation of each biomarker z-score
+    (should be 1 for all markers)
+      dim: 1 x number of biomarkers
+    stage_zscore and stage_biomarker_index give the different z-score stages
+    for the linear z-score model, i.e. the index of the different z-scores
+    for each biomarker
+    stage_zscore - the different z-scores of the model
+      dim: 1 x number of z-score stages
+    stage_biomarker_index - the index of the biomarker that the corresponding
+    entry of stage_zscore is referring to - !important! ensure biomarkers are
+    indexed s.t. they correspond to columns 1 to number of biomarkers in your
+    data
+      dim: 1 x number of z-score stages
+    ml_sequence_prev - the ordering of the stages for each subtype from the
+    previous SuStaIn model
+      dim: number of subtypes x number of z-score stages
+    ml_f_prev - the proportion of individuals belonging to each subtype from
+    the previous SuStaIn model
+      dim: number of subtypes x 1
+    N_startpoints: the number of start points for the fitting
+    likelihood_flag: whether to use an exact method of inference - when set
+    to 'Exact', the exact method is used, the approximate method is used for
+    all other settings
+    
+    Outputs:
+    =======
+
+    ml_sequence: the ordering of the stages for each subtype for the next
+    SuStaIn model in the hierarchy
+    ml_f: the most probable proportion of individuals belonging to each
+    subtype for the next SuStaIn model in the hierarchy
+    ml_likelihood: the likelihood of the most probable SuStaIn model for the
+    next SuStaIn model in the hierarchy
+    previous outputs _mat - same as before but for each start point
+    '''
 
     N_S = len(ml_sequence_prev)+1
     if N_S == 1:
