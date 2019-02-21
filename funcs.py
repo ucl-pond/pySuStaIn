@@ -99,9 +99,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
     Inputs: 
     =======
 
-    data: *important* needs to be (positive) z-scores! 
-        dimension: number of subjects x number of biomarkers
-    min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
+    data: *Positive* z-scores matrix (subjects x number of biomarkers) 
+    min_biomarker_zscore: a minimum z-score for each biomarker (usually zero
     for all markers)
     dim: 1 x number of biomarkers
     max_biomarker_zscore - a maximum z-score for each biomarker - reached at
@@ -360,7 +359,17 @@ def perform_em_mixturelinearzscoremodels(data,
                                          current_sequence,
                                          current_f,
                                          likelihood_flag):
-    # Perform an E-M procedure to estimate parameters of SuStaIn model
+    ''' 
+    Performs an E-M procedure to estimate parameters of the SuStaIn model
+    
+    Inputs
+    ====== 
+
+
+    Output
+    ======
+
+    ''' 
     MaxIter = 100
     
     N = stage_zscore.shape[1]
@@ -694,7 +703,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
     p_perm_k = np.zeros((M,N+1,N_S))
 
     for s in range(N_S):
-        if likelihood_flag=='Exact':
+        if likelihood_flag == 'Exact':
             p_perm_k[:,:,s] = calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                                                   min_biomarker_zscore,
                                                                                   max_biomarker_zscore,

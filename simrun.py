@@ -1,6 +1,6 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
-# Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
+# Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 ###
 import numpy as np
 from matplotlib import pyplot as plt
@@ -9,32 +9,31 @@ from funcs import run_sustain_algorithm, cross_validate_sustain_model
 
 def main():
 
-    validate = True
-    
-    N = 10
-    M = 500
-    N_S_gt = 1
-    Z_vals = np.array([[1,2,3]]*N)
+    validate = False
+    N = 5  #number of biomarkers
+    M = 20 #number of observations ( e.g., subjects )
+    N_S_gt = 2 #
+    Z_vals = np.array([[1,2,3]]*N) 
     IX_vals = np.array([[x for x in range(N)]]*3).T
-    Z_max = np.array([5]*N)
-    
+    Z_max = np.array([5]*N) #assuming the maximum z-score is 5
     stage_zscore = np.array([y for x in Z_vals.T for y in x])
     stage_zscore = stage_zscore.reshape(1,len(stage_zscore))
     stage_biomarker_index = np.array([y for x in IX_vals.T for y in x])
     stage_biomarker_index = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
-    
     min_biomarker_zscore = [0]*N;
     max_biomarker_zscore = Z_max;
     std_biomarker_zscore = [1]*N;
+
     SuStaInLabels = []
     SuStaInStageLabels = []
+    #['Biomarker 0', 'Biomarker 1', ..., 'Biomarker N' ]
     for i in range(N):
         SuStaInLabels.append('Biomarker '+str(i))
     for i in range(len(stage_zscore)):
         SuStaInStageLabels.append('B'+str(stage_biomarker_index[i])+' - Z'+str(stage_zscore[i]))
-
     gt_f = [1] + [0.5*x for x in range(N_S_gt-1)]
     gt_f = [x/sum(gt_f) for x in gt_f][::-1]
+    print( gt_f )
     gt_sequence = generate_random_sustain_model(stage_zscore,stage_biomarker_index,N_S_gt)
     N_k_gt = np.array(stage_zscore).shape[1]+1
 
