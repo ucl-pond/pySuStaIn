@@ -1,5 +1,8 @@
 pySuStaIn
 ============
+
+[![Build Status](https://travis-ci.com/armaneshaghi/pySuStaIn.svg?branch=development)](https://travis-ci.com/armaneshaghi/pySuStaIn)
+
 Python translation of the Subtype and Stage Inference (SuStaIn) model, including an example using simulated data.
 
 SuStaIn papers
