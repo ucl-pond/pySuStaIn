@@ -1,5 +1,5 @@
 ###
-# pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
+# pySuStaIn: pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41467-018-05892-0)
 # Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 ###
 import numpy as np
@@ -8,13 +8,13 @@ from simfuncs import generate_random_sustain_model, generate_data_sustain
 from funcs import run_sustain_algorithm, cross_validate_sustain_model
 
 def main():
-    
+    #whether or not to have a cross-validation
     validate = False
     #data simulation parameters
     N = 10  #number of biomarkers
     M = 100 #number of observations ( e.g., subjects )
-    N_S_gt = 4 #
-    Z_vals = np.array([[1,2,3]]*N) 
+    N_S_gt = 3 #number of ground truth subtypes
+    Z_vals = np.array([[1,2,3]]*N) #
     IX_vals = np.array([[x for x in range(N)]]*3).T
     Z_max = np.array([5]*N) #assuming the maximum z-score is 5
     stage_zscore = np.array([y for x in Z_vals.T for y in x])
@@ -36,10 +36,8 @@ def main():
     gt_f = [x/sum(gt_f) for x in gt_f][::-1]
     gt_sequence = generate_random_sustain_model(stage_zscore,stage_biomarker_index,N_S_gt)
     N_k_gt = np.array(stage_zscore).shape[1]+1
-
     subtypes = np.random.choice(range(N_S_gt),M,replace=True,p=gt_f)
     stages = np.ceil(np.random.rand(M,1)*(N_k_gt+1))-1
-
     data, data_denoised, stage_value = generate_data_sustain(subtypes,
                                                              stages,
                                                              gt_sequence,
@@ -48,12 +46,18 @@ def main():
                                                              std_biomarker_zscore,
                                                              stage_zscore,
                                                              stage_biomarker_index)
-    N_startpoints = 25
-    N_S_max = 3 #maximum number of subtypes 
-    N_iterations_MCMC = int(1e6)
+    #number of starting points according to Young et al, Nature Communications
+    N_startpoints = 25 
+    #maximum number of subtypes 
+    N_S_max = 3 
+    #1,000,000 samples from the posterior distribution
+    #N_iterations_MCMC = int(1e6)
+    N_iterations_MCMC = int(1e3)
+
     likelihood_flag = 'Exact'
     output_folder = 'simulateddataResults'
     dataset_name = 'simulateddata'
+    
     samples_sequence, samples_f = run_sustain_algorithm(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,
