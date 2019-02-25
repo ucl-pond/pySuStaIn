@@ -1,10 +1,5 @@
 pySuStaIn
 ============
-The Subtype and Stage Inference (SuStaIn) model in Python
-
-Quick Start Guide
-=================
-pySuStaIn requires Python version 3.3 and above.
 
 SuStaIn papers
 ============
