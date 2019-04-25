@@ -1,6 +1,6 @@
 ###
-# pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
-# Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
+# pySuStaIn: pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41468-018-05892-0)
+# Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 ###
 import numpy as np
 from matplotlib import pyplot as plt
@@ -8,39 +8,38 @@ from simfuncs import generate_random_sustain_model, generate_data_sustain
 from funcs import run_sustain_algorithm, cross_validate_sustain_model
 
 def main():
-
-    validate = True
-    
-    N = 10
-    M = 500
-    N_S_gt = 1
-    Z_vals = np.array([[1,2,3]]*N)
+    #whether or not to have a cross-validation
+    validate = False
+    #data simulation parameters
+    N = 10  #number of biomarkers
+    M = 100 #number of observations ( e.g., subjects )
+    N_S_gt = 3 #number of ground truth subtypes
+    Z_vals = np.array([[1,2,3]]*N) #Z-scores for each biomarker
     IX_vals = np.array([[x for x in range(N)]]*3).T
-    Z_max = np.array([5]*N)
-    
+    Z_max = np.array([5]*N) #assuming the maximum z-score is 5
     stage_zscore = np.array([y for x in Z_vals.T for y in x])
     stage_zscore = stage_zscore.reshape(1,len(stage_zscore))
     stage_biomarker_index = np.array([y for x in IX_vals.T for y in x])
     stage_biomarker_index = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
-    
     min_biomarker_zscore = [0]*N;
     max_biomarker_zscore = Z_max;
     std_biomarker_zscore = [1]*N;
+
     SuStaInLabels = []
     SuStaInStageLabels = []
+    #['Biomarker 0', 'Biomarker 1', ..., 'Biomarker N' ]
     for i in range(N):
-        SuStaInLabels.append('Biomarker '+str(i))
+        SuStaInLabels.append( 'Biomarker '+str(i))
     for i in range(len(stage_zscore)):
-        SuStaInStageLabels.append('B'+str(stage_biomarker_index[i])+' - Z'+str(stage_zscore[i]))
-
-    gt_f = [1] + [0.5*x for x in range(N_S_gt-1)]
+        SuStaInStageLabels.append('B'+str(stage_biomarker_index[i])+ ' - Z' + str(stage_zscore[i]))
+    gt_f = [1] + [0.5*x for x in range(N_S_gt-1)] #ground truth population fraction of each subtype
     gt_f = [x/sum(gt_f) for x in gt_f][::-1]
+    #ground truth sequence for each subtype
     gt_sequence = generate_random_sustain_model(stage_zscore,stage_biomarker_index,N_S_gt)
-    N_k_gt = np.array(stage_zscore).shape[1]+1
 
+    N_k_gt = np.array(stage_zscore).shape[1]+1
     subtypes = np.random.choice(range(N_S_gt),M,replace=True,p=gt_f)
     stages = np.ceil(np.random.rand(M,1)*(N_k_gt+1))-1
-
     data, data_denoised, stage_value = generate_data_sustain(subtypes,
                                                              stages,
                                                              gt_sequence,
@@ -49,12 +48,18 @@ def main():
                                                              std_biomarker_zscore,
                                                              stage_zscore,
                                                              stage_biomarker_index)
-    N_startpoints = 25
+    #number of starting points according to Young et al, Nature Communications
+    N_startpoints = 25 
+    #maximum number of subtypes 
     N_S_max = 3
-    N_iterations_MCMC = int(1e6)
+    #1,000,000 samples from the posterior distribution
+    #N_iterations_MCMC = int(1e6)
+    N_iterations_MCMC = int(1e3)
+
     likelihood_flag = 'Exact'
     output_folder = 'simulateddataResults'
     dataset_name = 'simulateddata'
+    
     samples_sequence, samples_f = run_sustain_algorithm(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,
