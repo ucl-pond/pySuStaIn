@@ -1,0 +1,6 @@
+__pycache__/
+*.swp
+*.swm
+*.swo
+*.nfs
+simulateddataResults/
