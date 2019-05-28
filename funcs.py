@@ -1440,6 +1440,74 @@ def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
         
     return samples_likelihood_subj
 
+def subtype_and_stage_individuals_selectsubtypethenstage(data,
+                                                         samples_sequence,samples_f,
+                                                         min_biomarker_zscore,
+                                                         max_biomarker_zscore,
+                                                         std_biomarker_zscore,
+                                                         stage_zscore,
+                                                         stage_biomarker_index,
+                                                         likelihood_flag,
+                                                         N_samples,
+                                                         path_results,
+                                                         sequence):    
+    n_iterations_MCMC = samples_sequence.shape[2]
+    select_samples = np.round(np.linspace(1,n_iterations_MCMC,N_samples))
+
+    N_S = samples_sequence.shape[0]
+    temp_mean_f = np.mean(samples_f,axis=1)
+    ix = np.argsort(temp_mean_f)[::-1]
+
+    prob_subtype_stage = np.zeros((data.shape[0],stage_zscore.shape[1]+1,N_S))
+    prob_subtype = np.zeros((data.shape[0],N_S))
+    prob_stage = np.zeros((data.shape[0],stage_zscore.shape[1]+1))
+    for i in range(N_samples):
+        sample = select_samples[i]
+        if (i%(N_samples/10)==1):
+            print('Iteration',i,'of',N_samples,' (',(i-1)/N_samples*100.,' complete)\n')
+    
+        this_S = samples_sequence[ix,:,sample]
+        this_f = samples_f[ix,sample]
+    
+        total_prob_stage,total_prob_subtype,_,total_prob_subtype_stage = calculate_likelihood_MixtureLinearZscoreModels(data,
+                                                                                                                        min_biomarker_zscore,
+                                                                                                                        max_biomarker_zscore,
+                                                                                                                        std_biomarker_zscore,
+                                                                                                                        stage_zscore,
+                                                                                                                        stage_biomarker_index,
+                                                                                                                        this_S,
+                                                                                                                        this_f,
+                                                                                                                        likelihood_flag)        
+    
+        total_prob_subtype_norm = total_prob_subtype/np.tile(np.sum(total_prob_subtype,1).reshape(len(total_prob_subtype),1),(N_S-1))        
+        total_prob_stage_norm = total_prob_stage/np.tile(np.sum(total_prob_stage,1).reshape(len(total_prob_subtype),1),(stage_zscore.shape[1]+1))
+        total_prob_subtype_stage_norm = total_prob_subtype_stage/np.tile(np.sum(np.sum(total_prob_subtype_stage,1),2),(1, stage_zscore.shape[1]+1, N_S))
+    
+        prob_subtype_stage = ((i-1)/i*prob_subtype_stage)+(1./i*total_prob_subtype_stage_norm)
+        prob_subtype = ((i-1)/i*prob_subtype)+(1./i*total_prob_subtype_norm)
+        prob_stage = ((i-1)/i*prob_stage)+(1./i*total_prob_stage_norm)
+
+    ml_subtype = np.nan*np.ones((data.shape[0],1))
+    ml_stage = np.nan*np.ones((data.shape[0],1))
+    for i in range(data.shape[0]):
+        this_prob_subtype = np.squeeze(prob_subtype[i,:])
+        if (np.sum(np.isnan(this_prob_subtype))==0):
+            this_subtype = np.where(this_prob_subtype==max(this_prob_subtype))
+            ml_subtype[i] = this_subtype
+        this_prob_stage = np.squeeze(prob_subtype_stage[i,:,ml_subtype[i]])
+        if (np.sum(np.isnan(this_prob_stage))==0):
+            this_stage = np.where(this_prob_stage==max(this_prob_stage))
+            ml_stage[i] = this_stage-1
+
+    with open(output_folder+'/'+dataset_name+'_prob-subtype-stage.csv', 'w') as f:
+        writer = csv.writer(f)
+        writer.writerows(this_prob_subtype)
+        writer.writerows(this_prob_stage)
+            
+    prob_final_subtype = np.nan*np.ones((data.shape[0],1))
+    for y in range(data.shape[0]):
+        prob_final_subtype[y]=prob_subtype[y,ml_subtype[y]]
+        
 def calc_coeff(sig):
     return 1./np.sqrt(np.pi*2.0)*sig
 

@@ -7,12 +7,14 @@ from matplotlib import pyplot as plt
 from simfuncs import generate_random_sustain_model, generate_data_sustain
 from funcs import run_sustain_algorithm, cross_validate_sustain_model
 
+import math
+
 def main():
 
-    validate = True
+    validate = False
     
-    N = 10
-    M = 500
+    N = 5
+    M = 20
     N_S_gt = 1
     Z_vals = np.array([[1,2,3]]*N)
     IX_vals = np.array([[x for x in range(N)]]*3).T
@@ -49,6 +51,15 @@ def main():
                                                              std_biomarker_zscore,
                                                              stage_zscore,
                                                              stage_biomarker_index)
+    
+    numY, numX = (int(math.ceil(math.sqrt(data.shape[1]))),
+                  int(round(math.sqrt(data.shape[1]))))
+    fig, ax = plt.subplots(numX, numY)
+    for i in range(data.shape[1]):
+        ax[int(math.floor((i)/numY)), int(i % numY)].hist(data[:,i])
+    print np.min(data),np.max(data)
+    plt.show()
+    
     N_startpoints = 25
     N_S_max = 3
     N_iterations_MCMC = int(1e6)
