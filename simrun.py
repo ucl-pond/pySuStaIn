@@ -15,7 +15,7 @@ def main():
     
     N = 5
     M = 20
-    N_S_gt = 1
+    N_S_gt = 3
     Z_vals = np.array([[1,2,3]]*N)
     IX_vals = np.array([[x for x in range(N)]]*3).T
     Z_max = np.array([5]*N)
@@ -51,7 +51,7 @@ def main():
                                                              std_biomarker_zscore,
                                                              stage_zscore,
                                                              stage_biomarker_index)
-    
+    """
     numY, numX = (int(math.ceil(math.sqrt(data.shape[1]))),
                   int(round(math.sqrt(data.shape[1]))))
     fig, ax = plt.subplots(numX, numY)
@@ -59,10 +59,14 @@ def main():
         ax[int(math.floor((i)/numY)), int(i % numY)].hist(data[:,i])
     print np.min(data),np.max(data)
     plt.show()
-    
-    N_startpoints = 25
+    """
+    #    N_startpoints = 25
+    #    N_S_max = 3
+    #    N_iterations_MCMC = int(1e6)
+    N_startpoints = 2
     N_S_max = 3
-    N_iterations_MCMC = int(1e6)
+    N_iterations_MCMC = int(1e2)
+    
     likelihood_flag = 'Exact'
     output_folder = 'simulateddataResults'
     dataset_name = 'simulateddata'
