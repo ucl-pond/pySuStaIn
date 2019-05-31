@@ -495,6 +495,7 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
 
     return loglike,total_prob_subj,total_prob_stage,total_prob_cluster,p_perm_k
 
+
 def calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,
@@ -502,64 +503,120 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                         stage_zscore,
                                                         stage_biomarker_index,
                                                         S):
-    # Computes the likelihood of a single linear z-score model using an
-    # approximation method (faster)
-    #
-    #INPUTS: 
-    # data - !important! needs to be (positive) z-scores! 
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # S - the current ordering of the z-score stages for a particular subtype
-    #   dim: 1 x number of z-score stages
-    #
-    #OUTPUTS:
-    # p_perm_k - the probability of each subjects data at each stage of a
-    # particular subtype in the SuStaIn model
+    '''
+     Computes the likelihood of a single linear z-score model using an
+     approximation method (faster)
+
+    Inputs:
+    =======
+
+     data - !important! needs to be (positive) z-scores!
+       dim: number of subjects x number of biomarkers
+
+     min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
+     for all markers)
+       dim: 1 x number of biomarkers
+
+     max_biomarker_zscore - a maximum z-score for each biomarker - reached at
+     the final stage of the linear z-score model
+       dim: 1 x number of biomarkers
+
+     std_biomarker_zscore - the standard devation of each biomarker z-score
+     (should be 1 for all markers)
+       dim: 1 x number of biomarkers
+
+     stage_zscore and stage_biomarker_index give the different z-score stages
+     for the linear z-score model, i.e. the index of the different z-scores
+     for each biomarker
+
+     stage_zscore - the different z-scores of the model
+       dim: 1 x number of z-score stages
+
+     stage_biomarker_index - the index of the biomarker that the corresponding
+     entry of stage_zscore is referring to - !important! ensure biomarkers are
+     indexed s.t. they correspond to columns 1 to number of biomarkers in your
+     data
+       dim: 1 x number of z-score stages
+
+     S - the current ordering of the z-score stages for a particular subtype
+       dim: 1 x number of z-score stages
+
+    Outputs:
+    ========
+
+     p_perm_k - the probability of each subjects data at each stage of a particular subtype
+     in the SuStaIn model
+
+    '''
+
     N = stage_biomarker_index.shape[1]
-    S_inv = np.array([0]*N)
+    S_inv = np.array([0] * N)
     S_inv[S.astype(int)] = np.arange(N)
     possible_biomarkers = np.unique(stage_biomarker_index)
     B = len(possible_biomarkers)
-    point_value = np.zeros((B,N+2))
+    point_value = np.zeros((B, N + 2))
+
+    # all the arange you'll need below
+    arange_N = np.arange(N + 2)
+
     for i in range(B):
         b = possible_biomarkers[i]
-        event_location = np.concatenate([[0], S_inv[(stage_biomarker_index==b)[0]], [N]])
-        event_value = np.concatenate([[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index==b], [max_biomarker_zscore[i]]])
-        for j in range(len(event_location)-1):
-            if j==0: # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
-                temp = np.arange(event_location[j],event_location[j+1]+2)
-                point_value[i,temp] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
+        event_location = np.concatenate([[0], S_inv[(stage_biomarker_index == b)[0]], [N]])
+        event_value = np.concatenate(
+            [[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index == b], [max_biomarker_zscore[i]]])
+        for j in range(len(event_location) - 1):
+
+            if j == 0:  # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
+
+                # original
+                # temp        = np.arange(event_location[j],event_location[j+1]+2)
+                # point_value[i,temp] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
+
+                # much faster
+                # point_value[i, temp] = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
+
+                # fastest by a bit
+                temp = arange_N[event_location[j]:(event_location[j + 1] + 2)]
+                N_j = event_location[j + 1] - event_location[j] + 2
+                point_value[i, temp] = linspace_local2(event_value[j], event_value[j + 1], N_j, arange_N[0:N_j])
+
             else:
-                temp = np.arange(event_location[j]+1,event_location[j+1]+2)
-                point_value[i,temp] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
-    stage_value = 0.5*point_value[:,:point_value.shape[1]-1]+0.5*point_value[:,1:]
+                # original
+                # temp        = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                # #point_value[i, temp]        = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
+
+                # much faster
+                # point_value[i, temp]         = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
+
+                # fastest by a bit
+                temp = arange_N[(event_location[j] + 1):(event_location[j + 1] + 2)]
+                N_j = event_location[j + 1] - event_location[j] + 1
+                point_value[i, temp] = linspace_local2(event_value[j], event_value[j + 1], N_j, arange_N[0:N_j])
+
+    stage_value = 0.5 * point_value[:, :point_value.shape[1] - 1] + 0.5 * point_value[:, 1:]
     M = data.shape[0]
-    p_perm_k = np.zeros((M,N+1))
+    p_perm_k = np.zeros((M, N + 1))
+
     # optimised likelihood calc - take log and only call np.exp once after loop
-    sigmat = np.tile(std_biomarker_zscore,(M,1))
-    factor = np.log(1./np.sqrt(np.pi*2.0)*sigmat)
-    coeff = np.log(1./float(N+1))
-    for j in range(N+1):
-        x = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
-        p_perm_k[:,j] = coeff+np.sum(factor-.5*x*x,1)
+    sigmat = np.tile(std_biomarker_zscore, (M, 1))
+
+    factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
+    coeff = np.log(1. / float(N + 1))
+
+    # original
+    # for j in range(N+1):
+    #     x                   = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
+    #     p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
+    # end    = time.time()
+
+    # faster - do the tiling once
+    stage_value_tiled = np.tile(stage_value, (M, 1))
+    N_biomarkers = stage_value.shape[0]
+    for j in range(N + 1):
+        stage_value_tiled_j = stage_value_tiled[:, j].reshape(M, N_biomarkers)
+        x = (data - stage_value_tiled_j) / sigmat
+        p_perm_k[:, j] = coeff + np.sum(factor - .5 * np.square(x), 1)
+
     p_perm_k = np.exp(p_perm_k)
 
     return p_perm_k
