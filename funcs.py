@@ -51,19 +51,20 @@ def run_sustain_algorithm(data,
     
         ml_sequence_prev_EM = ml_sequence_EM
         ml_f_prev_EM = ml_f_EM
-        # plot and write results
-        
-        subtype_and_stage_individuals_selectsubtypethenstage(data,
-                                                             samples_sequence,
-                                                             samples_f,
-                                                             min_biomarker_zscore,
-                                                             max_biomarker_zscore,
-                                                             std_biomarker_zscore,
-                                                             stage_zscore,
-                                                             stage_biomarker_index,
-                                                             likelihood_flag,
-                                                             1000)
-        
+        # plot and write results        
+        ml_subtype, ml_stage = subtype_and_stage_individuals_selectsubtypethenstage(data,
+                                                                                    samples_sequence,
+                                                                                    samples_f,
+                                                                                    min_biomarker_zscore,
+                                                                                    max_biomarker_zscore,
+                                                                                    std_biomarker_zscore,
+                                                                                    stage_zscore,
+                                                                                    stage_biomarker_index,
+                                                                                    likelihood_flag,
+                                                                                    1000,
+                                                                                    s,
+                                                                                    output_folder,
+                                                                                    dataset_name)        
         biomarker_labels = np.array([str(x) for x in range(data.shape[1])])
         fig, ax = plot_sustain_model(samples_sequence,
                                      samples_f,
@@ -1465,7 +1466,10 @@ def subtype_and_stage_individuals_selectsubtypethenstage(data,
                                                          stage_zscore,
                                                          stage_biomarker_index,
                                                          likelihood_flag,
-                                                         N_samples):
+                                                         N_samples,
+                                                         N_c,
+                                                         output_folder,
+                                                         dataset_name):
     M = data.shape[0]
     n_iterations_MCMC = samples_sequence.shape[2]
     select_samples = np.round(np.linspace(0,n_iterations_MCMC-1,N_samples))
@@ -1478,9 +1482,8 @@ def subtype_and_stage_individuals_selectsubtypethenstage(data,
     prob_stage = np.zeros((data.shape[0],stage_zscore.shape[1]+1))
     for i in range(N_samples):
         sample = int(select_samples[i])
-        if (i%(N_samples/10)==1):
-            print('Iteration',i,'of',N_samples,' (',(i-1)/N_samples*100.,' complete)\n')
-        print i,ix,sample,samples_sequence.shape
+        #        if i%(N_samples/10)==0:
+        #            print('Staging: iteration',i,'of',N_samples,',',float(i)/N_samples*100.,'complete\n')
         this_S = samples_sequence[ix,:,sample]
         this_f = samples_f[ix,sample]
 
@@ -1493,8 +1496,7 @@ def subtype_and_stage_individuals_selectsubtypethenstage(data,
                                                                                                                           this_S,
                                                                                                                           this_f,
                                                                                                                           likelihood_flag)        
-        total_prob_subtype = total_prob_subtype.reshape(len(total_prob_subtype),N_S)
-        
+        total_prob_subtype = total_prob_subtype.reshape(len(total_prob_subtype),N_S)        
         total_prob_subtype_norm = total_prob_subtype/np.tile(np.sum(total_prob_subtype,1).reshape(len(total_prob_subtype),1),(1,N_S))
         total_prob_stage_norm = total_prob_stage/np.tile(np.sum(total_prob_stage,1).reshape(len(total_prob_subtype),1),(1,stage_zscore.shape[1]+1))
         total_prob_subtype_stage_norm = total_prob_subtype_stage/np.tile(np.sum(np.sum(total_prob_subtype_stage,1),1).reshape(M,1,1),(1, stage_zscore.shape[1]+1, N_S))
@@ -1513,16 +1515,9 @@ def subtype_and_stage_individuals_selectsubtypethenstage(data,
         this_prob_stage = np.squeeze(prob_subtype_stage[i,:,int(ml_subtype[i])])
         if (np.sum(np.isnan(this_prob_stage))==0):
             this_stage = np.where(this_prob_stage==np.max(this_prob_stage))
-            ml_stage[i] = this_stage[0][0]-1
-    """
-    with open(output_folder+'/'+dataset_name+'_prob-subtype-stage.csv', 'w') as f:
-        writer = csv.writer(f)
-        writer.writerows(this_prob_subtype)
-        writer.writerows(this_prob_stage)
-    """
-    prob_final_subtype = np.nan*np.ones((data.shape[0],1))
-    for y in range(data.shape[0]):
-        prob_final_subtype[y]=prob_subtype[y,int(ml_subtype[y])]
+            ml_stage[i] = this_stage[0][0]
+    
+    return ml_subtype,ml_stage
         
 def calc_coeff(sig):
     return 1./np.sqrt(np.pi*2.0)*sig
