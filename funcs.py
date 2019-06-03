@@ -7,7 +7,7 @@ from scipy.stats import norm
 from matplotlib import pyplot as plt
 import csv
 import os
-from sklearn.model_selection import KFold, StratifiedKFold
+#from sklearn.model_selection import KFold, StratifiedKFold
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
@@ -495,7 +495,6 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
 
     return loglike,total_prob_subj,total_prob_stage,total_prob_cluster,p_perm_k
 
-
 def calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,
@@ -569,12 +568,13 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
             if j == 0:  # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
 
                 # original
-                # temp        = np.arange(event_location[j],event_location[j+1]+2)
-                # point_value[i,temp] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
+                #            temp        = np.arange(event_location[j],event_location[j+1]+2)
+                #                point_value[i,temp] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
 
                 # much faster
-                # point_value[i, temp] = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
-
+                #                temp        = np.arange(event_location[j],event_location[j+1]+2)
+                #                point_value[i, temp] = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
+                
                 # fastest by a bit
                 temp = arange_N[event_location[j]:(event_location[j + 1] + 2)]
                 N_j = event_location[j + 1] - event_location[j] + 2
@@ -582,11 +582,12 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
 
             else:
                 # original
-                # temp        = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
-                # #point_value[i, temp]        = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
+                #                 temp        = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                #                 point_value[i, temp]        = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
 
                 # much faster
-                # point_value[i, temp]         = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
+                #                temp        = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                #                point_value[i, temp]         = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
 
                 # fastest by a bit
                 temp = arange_N[(event_location[j] + 1):(event_location[j + 1] + 2)]
@@ -604,11 +605,12 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     coeff = np.log(1. / float(N + 1))
 
     # original
-    # for j in range(N+1):
-    #     x                   = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
-    #     p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
-    # end    = time.time()
+    """
+    for j in range(N+1):
+        x                   = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
+        p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
 
+    """
     # faster - do the tiling once
     stage_value_tiled = np.tile(stage_value, (M, 1))
     N_biomarkers = stage_value.shape[0]
@@ -617,6 +619,7 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
         x = (data - stage_value_tiled_j) / sigmat
         p_perm_k[:, j] = coeff + np.sum(factor - .5 * np.square(x), 1)
 
+    
     p_perm_k = np.exp(p_perm_k)
 
     return p_perm_k
@@ -1585,3 +1588,9 @@ def calc_exp(x,mu,sig):
 
 def normPdf(x,mu,sig):
     return calc_coeff*calc_exp
+
+def linspace_local(a, b, N):
+    return a + (b-a)/(N-1.) * np.arange(N)
+
+def linspace_local2(a, b, N, arange_N):
+    return a + (b-a)/(N-1.) * arange_N
