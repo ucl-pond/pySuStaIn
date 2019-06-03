@@ -60,16 +60,13 @@ def main():
     print np.min(data),np.max(data)
     plt.show()
     """
-    #    N_startpoints = 25
-    #    N_S_max = 3
-    #    N_iterations_MCMC = int(1e6)
-    N_startpoints = 2
+    N_startpoints = 25
     N_S_max = 3
-    N_iterations_MCMC = int(1e2)
+    N_iterations_MCMC = int(1e6)
     
     likelihood_flag = 'Exact'
-    output_folder = 'simulateddataResults'
-    dataset_name = 'simulateddata'
+    output_folder = 'test'
+    dataset_name = 'test'
     samples_sequence, samples_f = run_sustain_algorithm(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,

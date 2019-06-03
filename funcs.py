@@ -1,13 +1,36 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
+# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 ###
 import numpy as np
 from scipy.stats import norm
 from matplotlib import pyplot as plt
 import csv
 import os
-#from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold
+import pickle
+from pathlib import Path
+
+def prepare_data(data, pat_hc_index):
+    '''
+    prepares the data by normalising tha patient data, checking signs, and missing data
+    for further modelling
+
+    inputs:
+    =======
+    data: an MxN Numpy array that corresponds to M observations for N biomarkers
+    pat_hc_index: an Nx1 Numpy array that has 1 for patients and 0 for controls
+
+
+    Outputs:
+    =======
+
+
+    '''
+
+    return None
+
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
@@ -21,37 +44,99 @@ def run_sustain_algorithm(data,
                           likelihood_flag,
                           output_folder,
                           dataset_name):
+    '''
+    Runs the sustain algorithm
+
+    Inputs:
+    ======
+
+    data: Z-score normalised data
+
+    min_biomarker_zscore:
+
+    max_biomarker_zscore:
+
+    std_biomarker_zscore:
+
+    stage_zscore:
+
+    stage_biomarker_index:
+
+    N_startpoints:
+
+    N_S_max: maximum number of subtypes
+
+    N_iterations_MCMC: number of iterations (default: 1e6)
+
+    likelihood_flag:
+
+    output_folder:
+
+    dataset_name:
+
+
+    Outputs
+    =======
+
+
+    '''
+
     ml_sequence_prev_EM = []
     ml_f_prev_EM = []
 
     fig0, ax0 = plt.subplots()
-    for s in range(N_S_max):
-        ml_sequence_EM,ml_f_EM,ml_likelihood_EM,ml_sequence_mat_EM,ml_f_mat_EM,ml_likelihood_mat_EM =  estimate_ml_sustain_model_nplus1_clusters(data,
-                                                                                                                                                 min_biomarker_zscore,
-                                                                                                                                                 max_biomarker_zscore,
-                                                                                                                                                 std_biomarker_zscore,
-                                                                                                                                                 stage_zscore,
-                                                                                                                                                 stage_biomarker_index,
-                                                                                                                                                 ml_sequence_prev_EM,
-                                                                                                                                                 ml_f_prev_EM,
-                                                                                                                                                 N_startpoints,
-                                                                                                                                                 likelihood_flag)    
-        seq_init = ml_sequence_EM
-        f_init = ml_f_EM
-        ml_sequence,ml_f,ml_likelihood,samples_sequence,samples_f,samples_likelihood = estimate_uncertainty_sustain_model(data,
-                                                                                                                          min_biomarker_zscore,
-                                                                                                                          max_biomarker_zscore,
-                                                                                                                          std_biomarker_zscore,
-                                                                                                                          stage_zscore,
-                                                                                                                          stage_biomarker_index,
-                                                                                                                          seq_init,
-                                                                                                                          f_init,
-                                                                                                                          N_iterations_MCMC,
-                                                                                                                          likelihood_flag)
-    
-        ml_sequence_prev_EM = ml_sequence_EM
-        ml_f_prev_EM = ml_f_EM
-        # plot and write results        
+    for s in range( N_S_max ):
+
+        pickle_filename_s           = output_folder + '/' + dataset_name + '_subtype' + str(s) + '.pickle'
+        pickle_filepath             = Path(pickle_filename_s)
+        if pickle_filepath.exists():
+            print("Found pickle file: " + pickle_filename_s + ". Using pickled variables for " + str(s) + " subtype.")
+
+
+            pickle_file             = open(pickle_filename_s, 'rb')
+
+            save_variables          = pickle.load(pickle_file)
+
+            samples_sequence        = save_variables["samples_sequence"]
+            samples_f               = save_variables["samples_f"]
+            biomarker_labels        = save_variables["biomarker_labels"]
+            stage_zscore            = save_variables["stage_zscore"]
+            stage_biomarker_index   = save_variables["stage_biomarker_index"]
+            N_S_max                 = save_variables["N_S_max"]
+            samples_likelihood      = save_variables["samples_likelihood"]
+
+            pickle_file.close()
+        else:
+            print("Failed to find pickle file: " + pickle_filename_s + ". Running SuStaIn model for " + str(s) + " subtype.")
+
+            ml_sequence_EM,ml_f_EM,ml_likelihood_EM,ml_sequence_mat_EM,ml_f_mat_EM,ml_likelihood_mat_EM = estimate_ml_sustain_model_nplus1_clusters(data,
+                                                                                                                                                     min_biomarker_zscore,
+                                                                                                                                                     max_biomarker_zscore,
+                                                                                                                                                     std_biomarker_zscore,
+                                                                                                                                                     stage_zscore,
+                                                                                                                                                     stage_biomarker_index,
+                                                                                                                                                     ml_sequence_prev_EM,
+                                                                                                                                                     ml_f_prev_EM,
+                                                                                                                                                     N_startpoints,
+                                                                                                                                                     likelihood_flag)
+            seq_init = ml_sequence_EM
+            f_init = ml_f_EM
+            ml_sequence,ml_f,ml_likelihood,samples_sequence,samples_f,samples_likelihood = estimate_uncertainty_sustain_model(data,
+                                                                                                                              min_biomarker_zscore,
+                                                                                                                              max_biomarker_zscore,
+                                                                                                                              std_biomarker_zscore,
+                                                                                                                              stage_zscore,
+                                                                                                                              stage_biomarker_index,
+                                                                                                                              seq_init,
+                                                                                                                              f_init,
+                                                                                                                              N_iterations_MCMC,
+                                                                                                                              likelihood_flag)
+            ml_sequence_prev_EM = ml_sequence_EM
+            ml_f_prev_EM        = ml_f_EM
+
+        #write results if they don't exist
+        biomarker_labels = np.array([str(x) for x in range(data.shape[1])])
+        # max like subtype and stage / subject
         ml_subtype, ml_stage = subtype_and_stage_individuals_selectsubtypethenstage(data,
                                                                                     samples_sequence,
                                                                                     samples_f,
@@ -65,7 +150,26 @@ def run_sustain_algorithm(data,
                                                                                     s,
                                                                                     output_folder,
                                                                                     dataset_name)        
-        biomarker_labels = np.array([str(x) for x in range(data.shape[1])])
+        if not pickle_filepath.exists():
+
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+
+            save_variables  = {}
+            save_variables["samples_sequence"]      = samples_sequence
+            save_variables["samples_f"]             = samples_f
+            save_variables["biomarker_labels"]      = biomarker_labels
+            save_variables["stage_zscore"]          = stage_zscore
+            save_variables["stage_biomarker_index"] = stage_biomarker_index
+            save_variables["N_S_max"]               = N_S_max
+            save_variables["samples_likelihood"]    = samples_likelihood
+            save_variables["ml_subtype"]    = ml_subtype
+            save_variables["ml_stage"]    = ml_stage
+            
+            pickle_file                             = open(pickle_filename_s, 'wb')
+            pickle_output                           = pickle.dump(save_variables, pickle_file)
+            pickle_file.close()
+        # plot results
         fig, ax = plot_sustain_model(samples_sequence,
                                      samples_f,
                                      biomarker_labels,
@@ -78,6 +182,9 @@ def run_sustain_algorithm(data,
                                      samples_likelihood)
         ax0.plot(range(N_iterations_MCMC),samples_likelihood)
         
+    #saving the figure
+    fig0.savefig( 'MCMC_likelihood' + str(N_iterations_MCMC) + '.png', bbox_inches = 'tight')
+
     return samples_sequence, samples_f
 
 def estimate_ml_sustain_model_nplus1_clusters(data,
@@ -624,6 +731,12 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
 
     return p_perm_k
 
+def linspace_local(a, b, N):
+    return a + (b-a)/(N-1.) * np.arange(N)
+
+def linspace_local2(a, b, N, arange_N):
+    return a + (b-a)/(N-1.) * arange_N
+
 def calculate_likelihood_stage_linearzscoremodel(data,
                                                  min_biomarker_zscore,
                                                  max_biomarker_zscore,
@@ -1134,9 +1247,7 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                      f_init,
                                                      likelihood_flag):
     # Optimise the perturbation size for the MCMC algorithm
-#    n_iterations_MCMC_optimisation = int(1e4) # FIXME: set externally
-    #HACK
-    n_iterations_MCMC_optimisation = int(1e1) # FIXME: set externally
+    n_iterations_MCMC_optimisation = int(1e4) # FIXME: set externally
     
     n_passes_optimisation = 3
 
@@ -1349,18 +1460,20 @@ def plot_sustain_model(samples_sequence,
     plt.tight_layout()
     if cval:
         fig.suptitle('Cross validation')
+
     # write results            
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    with open(output_folder+'/'+dataset_name+'_subtype'+str(subtype)+'.csv', 'w') as f:
-        writer = csv.writer(f)
-        writer.writerows(samples_sequence)
-        writer.writerows(samples_f)
-        writer.writerows(biomarker_labels.reshape(1,len(biomarker_labels)))
-        writer.writerows(stage_zscore)
-        writer.writerows(stage_biomarker_index)
-        writer.writerow([N_z])
-        writer.writerow(samples_likelihood)
+    # if not os.path.exists(output_folder):
+    #     os.makedirs(output_folder)
+    # with open(output_folder+'/'+dataset_name+'_subtype'+str(subtype)+'.csv', 'w') as f:
+    #     writer = csv.writer(f)
+    #     writer.writerows(samples_sequence)
+    #     writer.writerows(samples_f)
+    #     writer.writerows(biomarker_labels.reshape(1,len(biomarker_labels)))
+    #     writer.writerows(stage_zscore)
+    #     writer.writerows(stage_biomarker_index)
+    #     writer.writerow([N_z])
+    #     writer.writerow(samples_likelihood)
+
     return fig, ax
 
 def cross_validate_sustain_model(data,
