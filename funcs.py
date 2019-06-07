@@ -1,5 +1,5 @@
 ###
-# pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
+# pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41468-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 # Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 ###
@@ -11,7 +11,7 @@ import os
 from sklearn.model_selection import KFold, StratifiedKFold
 import pickle
 from pathlib import Path
-
+from multiprocessing import pool
 
 def prepare_data(data, pat_hc_index):
     '''
@@ -26,7 +26,6 @@ def prepare_data(data, pat_hc_index):
     '''
 
     return None
-
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
@@ -68,7 +67,9 @@ def run_sustain_algorithm(data,
 
         pickle_filename_s = output_folder + '/' + dataset_name + '_subtype' + str(s) + '.pickle'
         pickle_filepath = Path(pickle_filename_s)
-        if pickle_filepath.exists():
+        # FIXME: for the moment we will always run the code, to avoid confusion
+        #        if pickle_filepath.exists():
+        if False:
             print("Found pickle file: " + pickle_filename_s + ". Using pickled variables for " + str(s) + " subtype.")
 
 
@@ -90,8 +91,7 @@ def run_sustain_algorithm(data,
 
             pickle_file.close()
         else:
-            print("Failed to find pickle file: " + pickle_filename_s + ". Running SuStaIn model for " + str(
-                s) + " subtype.")
+            print("Failed to find pickle file: " + pickle_filename_s + ". Running SuStaIn model for " + str(s) + " subtype.")
 
             ml_sequence_EM, ml_f_EM, ml_likelihood_EM, ml_sequence_mat_EM, ml_f_mat_EM, ml_likelihood_mat_EM = estimate_ml_sustain_model_nplus1_clusters(
                 data,
@@ -165,17 +165,11 @@ def run_sustain_algorithm(data,
                                      dataset_name,
                                      s,
                                      samples_likelihood)
-        fig.show()
 
-        ax0.plot(range(N_iterations_MCMC), samples_likelihood, label="subtypes"+ str(s))
-
-    #save and show this figure after all subtypes have been calculated
-    ax0.legend(loc = 'upper right')
-    fig0.savefig( output_folder + '/MCMC_likelihood' + str(N_iterations_MCMC) + '.png', bbox_inches = 'tight')
-    fig0.show()
+        ax0.plot(range(N_iterations_MCMC),samples_likelihood)
+        plt.savefig( 'MCMC_likelihood' + str(N_iterations_MCMC) + '.png', bbox_inches = 'tight')
 
     return samples_sequence, samples_f
-
 
 def estimate_ml_sustain_model_nplus1_clusters(data,
                                               min_biomarker_zscore,
@@ -187,64 +181,82 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                               ml_f_prev,
                                               N_startpoints,
                                               likelihood_flag):
-    # Given the previous SuStaIn model, estimate the next model in the
-    # hierarchy (i.e. number of subtypes goes from N to N+1)
-    #
-    # INPUTS:
-    # data - !important! needs to be (positive) z-scores!
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # ml_sequence_prev - the ordering of the stages for each subtype from the
-    # previous SuStaIn model
-    #   dim: number of subtypes x number of z-score stages
-    # ml_f_prev - the proportion of individuals belonging to each subtype from
-    # the previous SuStaIn model
-    #   dim: number of subtypes x 1
-    # N_startpoints - the number of start points for the fitting
-    # likelihood_flag - whether to use an exact method of inference - when set
-    # to 'Exact', the exact method is used, the approximate method is used for
-    # all other settings
-    #
-    # OUTPUTS:
-    # ml_sequence - the ordering of the stages for each subtype for the next
-    # SuStaIn model in the hierarchy
-    # ml_f - the most probable proportion of individuals belonging to each
-    # subtype for the next SuStaIn model in the hierarchy
-    # ml_likelihood - the likelihood of the most probable SuStaIn model for the
-    # next SuStaIn model in the hierarchy
-    # previous outputs _mat - same as before but for each start point
+    '''
+    Given the previous SuStaIn model, estimate the next model in the
+    hierarchy (i.e. number of subtypes goes from N to N+1)
+    
+    Inputs: 
+    =======
+
+    data: *Positive* z-scores matrix (subjects x number of biomarkers) 
+    min_biomarker_zscore: a minimum z-score for each biomarker (usually zero
+    for all markers)
+    dim: 1 x number of biomarkers
+
+    max_biomarker_zscore - a maximum z-score for each biomarker - reached at
+    the final stage of the linear z-score model
+      dim: 1 x number of biomarkers
+
+    std_biomarker_zscore - the standard devation of each biomarker z-score
+    (should be 1 for all markers)
+      dim: 1 x number of biomarkers
+
+    stage_zscore and stage_biomarker_index give the different z-score stages
+    for the linear z-score model, i.e. the index of the different z-scores
+    for each biomarker
+
+    stage_zscore - the different z-scores of the model
+      dim: 1 x number of z-score stages
+
+    stage_biomarker_index - the index of the biomarker that the corresponding
+    entry of stage_zscore is referring to - !important! ensure biomarkers are
+    indexed s.t. they correspond to columns 1 to number of biomarkers in your
+    data
+      dim: 1 x number of z-score stages
+
+    ml_sequence_prev - the ordering of the stages for each subtype from the
+    previous SuStaIn model
+      dim: number of subtypes x number of z-score stages
+
+    ml_f_prev - the proportion of individuals belonging to each subtype from
+    the previous SuStaIn model
+      dim: number of subtypes x 1
+
+    N_startpoints: the number of start points for the fitting
+
+    likelihood_flag: whether to use an exact method of inference - when set
+    to 'Exact', the exact method is used, the approximate method is used for
+    all other settings
+    
+    Outputs:
+    =======
+
+    ml_sequence: the ordering of the stages for each subtype for the next
+    SuStaIn model in the hierarchy
+
+    ml_f: the most probable proportion of individuals belonging to each
+    subtype for the next SuStaIn model in the hierarchy
+
+    ml_likelihood: the likelihood of the most probable SuStaIn model for the
+    next SuStaIn model in the hierarchy
+
+    previous outputs _mat: same as before but for each start point
+
+    '''
 
     N_S = len(ml_sequence_prev) + 1
     if N_S == 1:
-        # If the number of subtypes is 1, fit a single linear z-score model
-        print('Finding ML solution to 1 cluster problem')
-        ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat = find_ml_linearzscoremodel(data,
-                                                                                                                   min_biomarker_zscore,
-                                                                                                                   max_biomarker_zscore,
-                                                                                                                   std_biomarker_zscore,
-                                                                                                                   stage_zscore,
-                                                                                                                   stage_biomarker_index,
-                                                                                                                   N_startpoints,
-                                                                                                                   likelihood_flag)
-        print('Overall ML likelihood is', ml_likelihood)
+        # If the number of subtypes is 1, fit a single linear z-score model 
+        print( 'Finding ML solution to 1 cluster problem' )
+        ml_sequence,ml_f,ml_likelihood,ml_sequence_mat,ml_f_mat,ml_likelihood_mat = find_ml_linearzscoremodel(data,
+                                                                                                              min_biomarker_zscore,
+                                                                                                              max_biomarker_zscore,
+                                                                                                              std_biomarker_zscore,
+                                                                                                              stage_zscore,
+                                                                                                              stage_biomarker_index,
+                                                                                                              N_startpoints,
+                                                                                                              likelihood_flag)
+        print('Overall ML likelihood is',ml_likelihood)
     else:
         # If the number of subtypes is greater than 1, go through each subtype
         # in turn and try splitting into two subtypes
@@ -321,7 +333,6 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
 
     return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-
 def find_ml_linearzscoremodel(data,
                               min_biomarker_zscore,
                               max_biomarker_zscore,
@@ -330,47 +341,58 @@ def find_ml_linearzscoremodel(data,
                               stage_biomarker_index,
                               N_startpoints,
                               likelihood_flag):
-    # Fit a linear z-score model
-    #
-    # INPUTS:
-    # data - !important! needs to be (positive) z-scores!
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # N_startpoints - the number of start points for the fitting
-    # likelihood_flag - whether to use an exact method of inference - when set
-    # to 'Exact', the exact method is used, the approximate method is used for
-    # all other settings
-    #
-    # OUTPUTS:
-    # ml_sequence - the ordering of the stages for each subtype
-    # ml_f - the most probable proportion of individuals belonging to each
-    # subtype
-    # ml_likelihood - the likelihood of the most probable SuStaIn model
-    # previous outputs _mat - same as before but for each start point
+    ''' 
+    Fit a linear z-score model
+    
+    INPUTS: 
+    ======
+
+     data: !important! needs to be (positive) z-scores! 
+       dim: number of subjects x number of biomarkers
+
+     min_biomarker_zscore: a minimum z-score for each biomarker (usually zero
+     for all markers)
+       dim: 1 x number of biomarkers
+
+     max_biomarker_zscore - a maximum z-score for each biomarker - reached at
+     the final stage of the linear z-score model
+       dim: 1 x number of biomarkers
+     std_biomarker_zscore - the standard devation of each biomarker z-score
+     (should be 1 for all markers)
+       dim: 1 x number of biomarkers
+     stage_zscore and stage_biomarker_index give the different z-score stages
+     for the linear z-score model, i.e. the index of the different z-scores
+     for each biomarker
+     stage_zscore - the different z-scores of the model
+       dim: 1 x number of z-score stages
+     stage_biomarker_index - the index of the biomarker that the corresponding
+     entry of stage_zscore is referring to - !important! ensure biomarkers are
+     indexed s.t. they correspond to columns 1 to number of biomarkers in your
+     data
+       dim: 1 x number of z-score stages
+     N_startpoints - the number of start points for the fitting
+     likelihood_flag - whether to use an exact method of inference - when set
+     to 'Exact', the exact method is used, the approximate method is used for
+     all other settings
+    
+    OUTPUTS:
+    ======== 
+
+     ml_sequence - the ordering of the stages for each subtype
+     ml_f - the most probable proportion of individuals belonging to each
+     subtype
+     ml_likelihood - the likelihood of the most probable SuStaIn model
+     previous outputs _mat - same as before but for each start point
+
+    '''
+    # FIXME: work in progress
+    n_cpu = 10
 
     terminate = 0
     startpoint = 0
-
-    ml_sequence_mat = np.zeros((1, stage_zscore.shape[1], N_startpoints))
-    ml_f_mat = np.zeros((1, N_startpoints))
+    startpoints = range( N_startpoints )
+    ml_sequence_mat = np.zeros((1,stage_zscore.shape[1],N_startpoints))
+    ml_f_mat = np.zeros((1,N_startpoints))
     ml_likelihood_mat = np.zeros(N_startpoints)
     while terminate == 0:
         print(' ++ startpoint', startpoint)
@@ -397,28 +419,36 @@ def find_ml_linearzscoremodel(data,
     ml_sequence = ml_sequence_mat[:, :, ix]
     ml_f = ml_f_mat[:, ix]
     ml_likelihood = ml_likelihood_mat[ix]
+
     return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
+def initialise_sequence_linearzscoremodel(stage_zscore,stage_biomarker_index):
+    '''
+     Randomly initialises a linear z-score model ensuring that the biomarkers
+     are monotonically increasing
+    
+    Inputs:
+    =======
 
-def initialise_sequence_linearzscoremodel(stage_zscore, stage_biomarker_index):
-    # Randomly initialises a linear z-score model ensuring that the biomarkers
-    # are monotonically increasing
-    #
-    # INPUTS:
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    #
-    # OUTPUTS:
-    # S - a random linear z-score model under the condition that each biomarker
-    # is monotonically increasing
+     stage_zscore and stage_biomarker_index give the different z-score stages
+     for the linear z-score model, i.e. the index of the different z-scores
+     for each biomarker
+     stage_zscore - the different z-scores of the model
+       dim: 1 x number of z-score stages
+     stage_biomarker_index - the index of the biomarker that the corresponding
+     entry of stage_zscore is referring to - !important! ensure biomarkers are
+     indexed s.t. they correspond to columns 1 to number of biomarkers in your
+     data
+       dim: 1 x number of z-score stages
+    
+    Outputs:
+    =======
+
+     S - a random linear z-score model under the condition that each biomarker
+     is monotonically increasing
+
+    '''
+
     N = np.array(stage_zscore).shape[1]
     S = np.zeros(N)
     for i in range(N):
@@ -445,7 +475,6 @@ def initialise_sequence_linearzscoremodel(stage_zscore, stage_biomarker_index):
     S = S.reshape(1, len(S))
     return S
 
-
 def perform_em_mixturelinearzscoremodels(data,
                                          min_biomarker_zscore,
                                          max_biomarker_zscore,
@@ -455,7 +484,29 @@ def perform_em_mixturelinearzscoremodels(data,
                                          current_sequence,
                                          current_f,
                                          likelihood_flag):
-    # Perform an E-M procedure to estimate parameters of SuStaIn model
+    '''
+    Performs an E-M procedure to estimate parameters of the SuStaIn model.
+    
+    Inputs
+    ====== 
+     
+    Output
+    ======
+
+    ml_sequence:
+
+    ml_f:
+
+    ml_likelihood:
+
+    samples_sequence:
+
+    samples_f:
+
+    samples_likelihood:
+
+    ''' 
+
     MaxIter = 100
 
     N = stage_zscore.shape[1]
@@ -471,27 +522,28 @@ def perform_em_mixturelinearzscoremodels(data,
                                                                                     likelihood_flag)
     terminate = 0
     iteration = 0
-    samples_sequence = np.nan * np.ones((MaxIter, N, N_S))
-    samples_f = np.nan * np.ones((MaxIter, N_S))
-    samples_likelihood = np.nan * np.ones((MaxIter, 1))
+    convergence_threshold = 1e-6
 
-    samples_sequence[0, :, :] = current_sequence.reshape(current_sequence.shape[1], current_sequence.shape[0])
-    current_f = np.array(current_f).reshape(len(current_f))
-    samples_f[0, :] = current_f
+    samples_sequence = np.nan * np.ones(( MaxIter, N,N_S ))
+    samples_f = np.nan * np.ones(( MaxIter, N_S ))
+    samples_likelihood = np.nan * np.ones((MaxIter,1))
+    
+    samples_sequence[ 0, :, : ] = current_sequence.reshape(current_sequence.shape[1],current_sequence.shape[0])
+    current_f = np.array( current_f ).reshape(len(current_f))
+    samples_f[ 0, : ] = current_f
     samples_likelihood[0] = current_likelihood
-    while terminate == 0:
-        print('++ iteration', iteration)
-        candidate_sequence, candidate_f, candidate_likelihood = optimise_parameters_mixturelinearzscoremodels(data,
-                                                                                                              min_biomarker_zscore,
-                                                                                                              max_biomarker_zscore,
-                                                                                                              std_biomarker_zscore,
-                                                                                                              stage_zscore,
-                                                                                                              stage_biomarker_index,
-                                                                                                              current_sequence,
-                                                                                                              current_f,
-                                                                                                              likelihood_flag)
-        HAS_converged = np.fabs(
-            (candidate_likelihood - current_likelihood) / max(candidate_likelihood, current_likelihood)) < 1e-6
+    while terminate==0:
+        print('++ iteration',iteration)
+        candidate_sequence,candidate_f,candidate_likelihood = optimise_parameters_mixturelinearzscoremodels(data,
+                                                                                                             min_biomarker_zscore,
+                                                                                                             max_biomarker_zscore,
+                                                                                                             std_biomarker_zscore,
+                                                                                                             stage_zscore,
+                                                                                                             stage_biomarker_index,
+                                                                                                             current_sequence,
+                                                                                                             current_f,
+                                                                                                             likelihood_flag)
+        HAS_converged = np.fabs((candidate_likelihood-current_likelihood)/max(candidate_likelihood,current_likelihood)) < convergence_threshold
         if HAS_converged:
             print('EM converged in', iteration + 1, 'iterations')
             terminate = 1
@@ -512,7 +564,6 @@ def perform_em_mixturelinearzscoremodels(data,
     ml_likelihood = current_likelihood
     return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-
 def calculate_likelihood_mixturelinearzscoremodels(data,
                                                    min_biomarker_zscore,
                                                    max_biomarker_zscore,
@@ -522,49 +573,65 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
                                                    S,
                                                    f,
                                                    likelihood_flag):
-    # Computes the likelihood of a mixture of linear z-score models using either
-    # an approximate method (faster, default setting) or an exact method
-    #
-    # INPUTS:
-    # data - !important! needs to be (positive) z-scores!
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # S - the current ordering of the z-score stages for each subtype
-    #   dim: number of subtypes x number of z-score stages
-    # f - the current proportion of individuals belonging to each subtype
-    #   dim: number of subtypes x 1
-    # likelihood_flag - whether to use an exact method of inference - when set
-    # to 'Exact', the exact method is used, the approximate method is used for
-    # all other settings
-    #
-    # OUTPUTS:
-    # loglike - the log-likelihood of the current model
-    # total_prob_subj - the total probability of the current SuStaIn model for
-    # each subject
-    # total_prob_stage - the total probability of each stage in the current
-    # SuStaIn model
-    # total_prob_cluster - the total probability of each subtype in the current
-    # SuStaIn model
-    # p_perm_k - the probability of each subjects data at each stage of each
-    # subtype in the current SuStaIn model
+    '''
+     Computes the likelihood of a mixture of linear Z-score models using either
+     an approximate method (faster, default setting) or an exact method
+    
+    Inputs: 
+    ======
+
+     data - !important! needs to be (positive) z-scores! 
+       dim: number of subjects x number of biomarkers
+
+     min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
+     for all markers)
+       dim: 1 x number of biomarkers
+
+     max_biomarker_zscore - a maximum z-score for each biomarker - reached at
+     the final stage of the linear z-score model
+       dim: 1 x number of biomarkers
+
+     std_biomarker_zscore - the standard devation of each biomarker z-score
+     (should be 1 for all markers)
+       dim: 1 x number of biomarkers
+
+     stage_zscore and stage_biomarker_index give the different z-score stages
+     for the linear z-score model, i.e. the index of the different z-scores
+     for each biomarker
+
+     stage_zscore - the different z-scores of the model
+       dim: 1 x number of z-score stages
+
+     stage_biomarker_index - the index of the biomarker that the corresponding
+     entry of stage_zscore is referring to - !important! ensure biomarkers are
+     indexed s.t. they correspond to columns 1 to number of biomarkers in your
+     data
+       dim: 1 x number of z-score stages
+
+     S - the current ordering of the z-score stages for each subtype
+       dim: number of subtypes x number of z-score stages
+
+     f - the current proportion of individuals belonging to each subtype
+       dim: number of subtypes x 1
+
+     likelihood_flag - whether to use an exact method of inference - when set
+     to 'Exact', the exact method is used, the approximate method is used for
+     all other settings
+    
+    Outputs:
+    ========
+
+     loglike - the log-likelihood of the current model
+     total_prob_subj - the total probability of the current SuStaIn model for
+     each subject
+     total_prob_stage - the total probability of each stage in the current
+     SuStaIn model
+     total_prob_cluster - the total probability of each subtype in the current
+     SuStaIn model
+     p_perm_k - the probability of each subjects data at each stage of each
+     subtype in the current SuStaIn model
+    '''
+
     M = data.shape[0]
     N_S = S.shape[0]
     N = stage_zscore.shape[1]
@@ -598,7 +665,6 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
     loglike = sum(np.log(total_prob_subj + 1e-250))
 
     return loglike, total_prob_subj, total_prob_stage, total_prob_cluster, p_perm_k
-
 
 def calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                         min_biomarker_zscore,
@@ -635,14 +701,17 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
        dim: 1 x number of z-score stages
      S - the current ordering of the z-score stages for a particular subtype
        dim: 1 x number of z-score stages
+    
     Outputs:
     ========
+
      p_perm_k - the probability of each subjects data at each stage of a particular subtype
      in the SuStaIn model
+
     '''
 
     N = stage_biomarker_index.shape[1]
-    S_inv = np.array([0] * N)
+    S_inv = np.array([ 0 ] * N)
     S_inv[S.astype(int)] = np.arange(N)
     possible_biomarkers = np.unique(stage_biomarker_index)
     B = len(possible_biomarkers)
@@ -659,30 +728,10 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
         for j in range(len(event_location) - 1):
 
             if j == 0:  # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
-
-                # original
-                #            temp        = np.arange(event_location[j],event_location[j+1]+2)
-                #                point_value[i,temp] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
-
-                # much faster
-                #                temp        = np.arange(event_location[j],event_location[j+1]+2)
-                #                point_value[i, temp] = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
-
-                # fastest by a bit
                 temp = arange_N[event_location[j]:(event_location[j + 1] + 2)]
                 N_j = event_location[j + 1] - event_location[j] + 2
                 point_value[i, temp] = linspace_local2(event_value[j], event_value[j + 1], N_j, arange_N[0:N_j])
-
             else:
-                # original
-                #                 temp        = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
-                #                 point_value[i, temp]        = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
-
-                # much faster
-                #                temp        = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
-                #                point_value[i, temp]         = linspace_local(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
-
-                # fastest by a bit
                 temp = arange_N[(event_location[j] + 1):(event_location[j + 1] + 2)]
                 N_j = event_location[j + 1] - event_location[j] + 1
                 point_value[i, temp] = linspace_local2(event_value[j], event_value[j + 1], N_j, arange_N[0:N_j])
@@ -697,12 +746,6 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
     coeff = np.log(1. / float(N + 1))
 
-    # original
-    """
-    for j in range(N+1):
-        x                   = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
-        p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
-    """
     # faster - do the tiling once
     stage_value_tiled = np.tile(stage_value, (M, 1))
     N_biomarkers = stage_value.shape[0]
@@ -728,8 +771,9 @@ def calculate_likelihood_stage_linearzscoremodel(data,
     ########################################################
     ########################################################
     # Computes the likelihood of a single linear z-score model using an exact method (slower)
-    # INPUTS:
-    # data - !important! needs to be (positive) z-scores!
+    #Inputs: 
+
+    # data - !important! needs to be (positive) z-scores! 
     #   dim: number of subjects x number of biomarkers
     # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
     # for all markers)
@@ -820,7 +864,6 @@ def calculate_likelihood_stage_linearzscoremodel(data,
 
     return iterative_const * iterative_kappa * cdf_diff_val
 
-
 def optimise_parameters_mixturelinearzscoremodels(data,
                                                   min_biomarker_zscore,
                                                   max_biomarker_zscore,
@@ -830,7 +873,41 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                                                   S_init,
                                                   f_init,
                                                   likelihood_flag):
-    # Optimise the parameters of the SuStaIn model
+    '''
+    Optimises the parameters of the SuStaIn model
+    
+    Inputs
+    ======
+
+    data:
+
+    min_biomarker_zscore:
+
+    max_biomarker_zscore:
+
+    std_biomarker_zscore:
+
+    stage_zscore:
+
+    stage_biomarker_index:
+
+    S_init:
+
+    f_init:
+
+    likelihood_flag:
+
+    Outputs
+    =======
+
+    S_opt:
+
+    f_opt:
+    
+    likelihood_opt:
+
+    '''
+
     M = data.shape[0]
     N_S = S_init.shape[0]
     N = stage_zscore.shape[1]
@@ -869,7 +946,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
         order_bio = np.random.permutation(N)  # this will produce different random numbers to Matlab
         for i in order_bio:
             current_sequence = S_opt[s]
-            current_location = np.array([0] * len(current_sequence))
+            current_location = np.array([0]*len(current_sequence))
             current_location[current_sequence.astype(int)] = np.arange(len(current_sequence))
             selected_event = i
             move_event_from = current_location[selected_event]
@@ -894,7 +971,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                 move_event_to_upper_bound = current_location[max_zscore_bound_event]
             else:
                 move_event_to_upper_bound = N
-                # FIXME: hack because python won't produce an array in range (N,N), while matlab will produce an array (N)... urgh
+            # FIXME: hack because python won't produce an array in range (N,N), while matlab will produce an array (N)... urgh
             if move_event_to_lower_bound == move_event_to_upper_bound:
                 possible_positions = np.array([0])
             else:
@@ -939,8 +1016,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
             p_perm_k[:, :, s] = this_p_perm_k[:, :, 0]
         S_opt[s] = this_S
     p_perm_k_weighted = p_perm_k * f_val_mat
-    p_perm_k_norm = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (
-    1, N + 1, N_S))  # the second summation axis is different to Matlab version
+    p_perm_k_norm = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
     f_opt = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
     f_val_mat = np.tile(f_opt, (1, N + 1, M))
     f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
@@ -952,7 +1028,6 @@ def optimise_parameters_mixturelinearzscoremodels(data,
 
     return S_opt, f_opt, likelihood_opt
 
-
 def find_ml_mixture2linearzscoremodels(data,
                                        min_biomarker_zscore,
                                        max_biomarker_zscore,
@@ -961,41 +1036,58 @@ def find_ml_mixture2linearzscoremodels(data,
                                        stage_biomarker_index,
                                        N_startpoints,
                                        likelihood_flag):
-    # Fit a mixture of two linear z-score models
-    #
-    # INPUTS:
-    # data - !important! needs to be (positive) z-scores!
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # N_startpoints - the number of start points for the fitting
-    # likelihood_flag - whether to use an exact method of inference - when set
-    # to 'Exact', the exact method is used, the approximate method is used for
-    # all other settings
-    #
-    # OUTPUTS:
-    # ml_sequence - the ordering of the stages for each subtype
-    # ml_f - the most probable proportion of individuals belonging to each
-    # subtype
-    # ml_likelihood - the likelihood of the most probable SuStaIn model
-    # previous outputs _mat - same as before but for each start point
+    '''
+    Fit a mixture of two linear z-score models
+    
+    Inputs: 
+    ======
+
+     data: !important! needs to be (positive) z-scores! 
+       dim: number of subjects x number of biomarkers
+
+     min_biomarker_zscore: a minimum z-score for each biomarker (usually zero
+     for all markers)
+       dim: 1 x number of biomarkers
+
+     max_biomarker_zscore: a maximum z-score for each biomarker - reached at
+     the final stage of the linear z-score model
+       dim: 1 x number of biomarkers
+
+     std_biomarker_zscore: the standard devation of each biomarker z-score
+     (should be 1 for all markers)
+       dim: 1 x number of biomarkers
+
+     stage_zscore and stage_biomarker_index give the different z-score stages
+     for the linear z-score model, i.e. the index of the different z-scores
+     for each biomarker
+
+     stage_zscore - the different z-scores of the model
+       dim: 1 x number of z-score stages
+
+     stage_biomarker_index - the index of the biomarker that the corresponding
+     entry of stage_zscore is referring to - !important! ensure biomarkers are
+     indexed s.t. they correspond to columns 1 to number of biomarkers in your
+     data
+       dim: 1 x number of z-score stages
+
+     N_startpoints: the number of start points for the fitting
+     likelihood_flag - whether to use an exact method of inference - when set
+     to 'Exact', the exact method is used, the approximate method is used for
+     all other settings
+    
+    Outputs:
+    =======
+
+     ml_sequence - the ordering of the stages for each subtype
+
+     ml_f - the most probable proportion of individuals belonging to each
+     subtype
+
+     ml_likelihood - the likelihood of the most probable SuStaIn model
+     previous outputs _mat - same as before but for each start point
+
+    '''
+
     N_S = 2
 
     terminate = 0
@@ -1057,7 +1149,6 @@ def find_ml_mixture2linearzscoremodels(data,
 
     return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-
 def find_ml_mixturelinearzscoremodels(data,
                                       min_biomarker_zscore,
                                       max_biomarker_zscore,
@@ -1068,45 +1159,66 @@ def find_ml_mixturelinearzscoremodels(data,
                                       f_init,
                                       N_startpoints,
                                       likelihood_flag):
-    # Fit a mixture of linear z-score models
-    #
-    # INPUTS:
-    # data - !important! needs to be (positive) z-scores!
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # seq_init - intial ordering of the stages for each subtype
-    # f_init - initial proprtion of individuals belonging to each subtype
-    # N_startpoints - the number of start points for the fitting
-    # likelihood_flag - whether to use an exact method of inference - when set
-    # to 'Exact', the exact method is used, the approximate method is used for
-    # all other settings
-    #
-    # OUTPUTS:
-    # ml_sequence - the ordering of the stages for each subtype for the next
-    # SuStaIn model in the hierarchy
-    # ml_f - the most probable proportion of individuals belonging to each
-    # subtype for the next SuStaIn model in the hierarchy
-    # ml_likelihood - the likelihood of the most probable SuStaIn model for the
-    # next SuStaIn model in the hierarchy
-    # previous outputs _mat - same as before but for each start point
+    '''
+     Fit a mixture of linear z-score models
+    
+    Inputs: 
+    ======
+
+     data: !important! needs to be (positive) z-scores! 
+       dim: number of subjects x number of biomarkers
+
+     min_biomarker_zscore: a minimum z-score for each biomarker (usually zero
+     for all markers)
+       dim: 1 x number of biomarkers
+
+     max_biomarker_zscore: a maximum z-score for each biomarker - reached at
+     the final stage of the linear z-score model
+       dim: 1 x number of biomarkers
+
+     std_biomarker_zscore: the standard devation of each biomarker z-score
+     (should be 1 for all markers)
+       dim: 1 x number of biomarkers
+
+     stage_zscore and stage_biomarker_index give the different z-score stages
+     for the linear z-score model, i.e. the index of the different z-scores
+     for each biomarker
+
+     stage_zscore: the different z-scores of the model
+       dim: 1 x number of z-score stages
+
+     stage_biomarker_index: the index of the biomarker that the corresponding
+     entry of stage_zscore is referring to - !important! ensure biomarkers are
+     indexed s.t. they correspond to columns 1 to number of biomarkers in your
+     data
+       dim: 1 x number of z-score stages
+
+     seq_init: intial ordering of the stages for each subtype
+
+     f_init: initial proprtion of individuals belonging to each subtype
+
+     N_startpoints - the number of start points for the fitting
+
+     likelihood_flag - whether to use an exact method of inference - when set
+     to 'Exact', the exact method is used, the approximate method is used for
+     all other settings
+    
+    Outputs:
+    =======
+
+     ml_sequence - the ordering of the stages for each subtype for the next
+     SuStaIn model in the hierarchy
+
+     ml_f - the most probable proportion of individuals belonging to each
+     subtype for the next SuStaIn model in the hierarchy
+
+     ml_likelihood - the likelihood of the most probable SuStaIn model for the
+     next SuStaIn model in the hierarchy
+
+     previous outputs _mat - same as before but for each start point
+
+    '''
+
     N_S = seq_init.shape[0]
     terminate = 0
     startpoint = 0
@@ -1141,7 +1253,6 @@ def find_ml_mixturelinearzscoremodels(data,
 
     return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-
 def estimate_uncertainty_sustain_model(data,
                                        min_biomarker_zscore,
                                        max_biomarker_zscore,
@@ -1152,83 +1263,99 @@ def estimate_uncertainty_sustain_model(data,
                                        f_init,
                                        N_iterations_MCMC,
                                        likelihood_flag):
-    # Estimate the uncertainty in the subtype progression patterns and
-    # proportion of individuals belonging to the SuStaIn model
-    #
-    # INPUTS:
-    # data - !important! needs to be (positive) z-scores!
-    #   dim: number of subjects x number of biomarkers
-    # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-    # for all markers)
-    #   dim: 1 x number of biomarkers
-    # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-    # the final stage of the linear z-score model
-    #   dim: 1 x number of biomarkers
-    # std_biomarker_zscore - the standard devation of each biomarker z-score
-    # (should be 1 for all markers)
-    #   dim: 1 x number of biomarkers
-    # stage_zscore and stage_biomarker_index give the different z-score stages
-    # for the linear z-score model, i.e. the index of the different z-scores
-    # for each biomarker
-    # stage_zscore - the different z-scores of the model
-    #   dim: 1 x number of z-score stages
-    # stage_biomarker_index - the index of the biomarker that the corresponding
-    # entry of stage_zscore is referring to - !important! ensure biomarkers are
-    # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-    # data
-    #   dim: 1 x number of z-score stages
-    # seq_init - the ordering of the stages for each subtype to initialise the
-    # MCMC estimation from
-    #   dim: number of subtypes x number of z-score stages
-    # f_init - the proportion of individuals belonging to each subtype to
-    # intialise the MCMC esimation from
-    #   dim: number of subtypes x 1
-    # N_iterations_MCMC - the number of MCMC samples to take
-    # likelihood_flag - whether to use an exact method of inference - when set
-    # to 'Exact', the exact method is used, the approximate method is used for
-    # all other settings
-    #
-    # OUTPUTS:
-    # ml_sequence - the most probable ordering of the stages for each subtype
-    # found across MCMC samples
-    # ml_f - the most probable proportion of individuals belonging to each
-    # subtype found across MCMC samples
-    # ml_likelihood - the likelihood of the most probable SuStaIn model found
-    # across MCMC samples
-    # samples_sequence - samples of the ordering of the stages for each subtype
-    # obtained from MCMC sampling
-    # samples_f - samples of the proportion of individuals belonging to each
-    # subtype obtained from MCMC sampling
-    # samples_likeilhood - samples of the likelihood of each SuStaIn model
-    # sampled by the MCMC sampling
+    '''
+     Estimate the uncertainty in the subtype progression patterns and
+     proportion of individuals belonging to the SuStaIn model
+    
+    Inputs:
+    ======
 
-    # Perform a few initial passes where the perturbation sizes of the MCMC
-    # unertainty estimation are tuned
-    seq_sigma_opt, f_sigma_opt = optimise_mcmc_settings_mixturelinearzscoremodels(data,
-                                                                                  min_biomarker_zscore,
-                                                                                  max_biomarker_zscore,
-                                                                                  std_biomarker_zscore,
-                                                                                  stage_zscore,
-                                                                                  stage_biomarker_index,
-                                                                                  seq_init,
-                                                                                  f_init,
-                                                                                  likelihood_flag)
+     data: !important! needs to be (positive) z-scores! 
+       dim: number of subjects x number of biomarkers
+
+     min_biomarker_zscore: a minimum z-score for each biomarker (usually zero
+     for all markers)
+       dim: 1 x number of biomarkers
+
+     max_biomarker_zscore: a maximum z-score for each biomarker - reached at
+     the final stage of the linear z-score model
+       dim: 1 x number of biomarkers
+
+     std_biomarker_zscore: the standard devation of each biomarker z-score
+     (should be 1 for all markers)
+       dim: 1 x number of biomarkers
+
+     stage_zscore and stage_biomarker_index give the different z-score stages
+     for the linear z-score model, i.e. the index of the different z-scores
+     for each biomarker
+     stage_zscore - the different z-scores of the model
+       dim: 1 x number of z-score stages
+     stage_biomarker_index - the index of the biomarker that the corresponding
+     entry of stage_zscore is referring to - !important! ensure biomarkers are
+     indexed s.t. they correspond to columns 1 to number of biomarkers in your
+     data
+       dim: 1 x number of z-score stages
+     seq_init - the ordering of the stages for each subtype to initialise the
+     MCMC estimation from
+       dim: number of subtypes x number of z-score stages
+     f_init - the proportion of individuals belonging to each subtype to
+     intialise the MCMC esimation from
+       dim: number of subtypes x 1
+     N_iterations_MCMC - the number of MCMC samples to take
+     likelihood_flag - whether to use an exact method of inference - when set
+     to 'Exact', the exact method is used, the approximate method is used for
+     all other settings
+    
+    Outputs:
+    =======
+
+     ml_sequence: the most probable ordering of the stages for each subtype
+     found across MCMC samples
+
+     ml_f: the most probable proportion of individuals belonging to each
+     subtype found across MCMC samples
+
+     ml_likelihood: the likelihood of the most probable SuStaIn model found
+     across MCMC samples
+
+     samples_sequence: samples of the ordering of the stages for each subtype
+     obtained from MCMC sampling
+
+     samples_f: samples of the proportion of individuals belonging to each
+     subtype obtained from MCMC sampling
+
+     samples_likeilhood: samples of the likelihood of each SuStaIn model
+     sampled by the MCMC sampling
+    
+     Perform a few initial passes where the perturbation sizes of the MCMC
+     unertainty estimation are tuned
+
+    '''
+
+    seq_sigma_opt,f_sigma_opt = optimise_mcmc_settings_mixturelinearzscoremodels(data,
+                                                                                 min_biomarker_zscore,
+                                                                                 max_biomarker_zscore,
+                                                                                 std_biomarker_zscore,
+                                                                                 stage_zscore,
+                                                                                 stage_biomarker_index,
+                                                                                 seq_init,
+                                                                                 f_init,
+                                                                                 likelihood_flag)
     # Run the full MCMC algorithm to estimate the uncertainty
-    ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = perform_mcmc_mixturelinearzscoremodels(
-        data,
-        min_biomarker_zscore,
-        max_biomarker_zscore,
-        std_biomarker_zscore,
-        stage_zscore,
-        stage_biomarker_index,
-        seq_init,
-        f_init,
-        N_iterations_MCMC,
-        seq_sigma_opt,
-        f_sigma_opt,
-        likelihood_flag)
+    ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = perform_mcmc_mixturelinearzscoremodels(data,
+                                                                                                                               min_biomarker_zscore,
+                                                                                                                               max_biomarker_zscore,
+                                                                                                                               std_biomarker_zscore,
+                                                                                                                               stage_zscore,
+                                                                                                                               stage_biomarker_index,
+                                                                                                                               seq_init,
+                                                                                                                               f_init,
+                                                                                                                               N_iterations_MCMC,
+                                                                                                                               seq_sigma_opt,
+                                                                                                                               f_sigma_opt,
+                                                                                                                               likelihood_flag)
+    
     return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
-
 
 def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                      min_biomarker_zscore,
@@ -1280,7 +1407,6 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
 
     return seq_sigma_opt, f_sigma_opt
 
-
 def perform_mcmc_mixturelinearzscoremodels(data,
                                            min_biomarker_zscore,
                                            max_biomarker_zscore,
@@ -1293,6 +1419,54 @@ def perform_mcmc_mixturelinearzscoremodels(data,
                                            seq_sigma,
                                            f_sigma,
                                            likelihood_flag):
+    '''
+    Inputs:
+    ========
+
+    data:
+
+    min_biomarker_zscore:
+
+    max_biomarker_zscore:
+
+    std_biomarker_zscore:
+
+    stage_zscore:
+
+    stage_biomarker_index:
+
+    seq_init:
+
+    f_init:
+
+    n_iterations:
+
+    seq_sigma:
+
+    f_sigma:
+
+    likelihood_flag:
+
+
+    Outputs:
+    ========
+
+    ml_sequence:
+
+    ml_f:
+
+    ml_likelihood: the likelihood of the most probable SuStaIn model found
+     across MCMC samples
+
+    samples_sequence: posterior samples of the ordering of stages for each subtype
+     obtained from the MCMC
+
+    samples_f:  
+
+    samples_likelihood:
+
+    '''
+
     # Take MCMC samples of the uncertainty in the SuStaIn model parameters
     N = stage_zscore.shape[1]
     N_S = seq_init.shape[0]
@@ -1392,7 +1566,6 @@ def perform_mcmc_mixturelinearzscoremodels(data,
     ml_f = samples_f[:, perm_index]
     return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-
 def plot_sustain_model(samples_sequence,
                        samples_f,
                        biomarker_labels,
@@ -1477,9 +1650,7 @@ def plot_sustain_model(samples_sequence,
     #     writer.writerows(stage_biomarker_index)
     #     writer.writerow([N_z])
     #     writer.writerow(samples_likelihood)
-
     return fig, ax
-
 
 def cross_validate_sustain_model(data,
                                  test_idxs,
@@ -1496,12 +1667,15 @@ def cross_validate_sustain_model(data,
                                  dataset_name,
                                  select_fold,
                                  target):
+    '''
     # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
     # and MCMC) on a training dataset and evaluating the model likelihood on a test
     # dataset. 'data_fold' should specify the membership of each data point to a
     # test fold. Use a specific index of variable 'select_fold' to just run for a
     # single fold (allows the cross-validation to be run in parallel), or leave
     # the variable 'select_fold' empty to iterate across folds sequentially.
+    '''
+
     if not test_idxs:
         print(
             '!!!CAUTION!!! No user input for cross-validation fold selection - using automated stratification. Only do this if you know what you are doing!')
@@ -1524,7 +1698,7 @@ def cross_validate_sustain_model(data,
     Nfolds = len(test_idxs)
 
     for fold in range(Nfolds):
-        #        print('Cross-validating fold',fold,'of',Nfolds,'with index',test_idxs[fold])
+        # print('Cross-validating fold',fold,'of',Nfolds,'with index',test_idxs[fold])
         data_train = data[np.array([x for x in range(data.shape[0]) if x not in test_idxs[fold]])]
         data_test = data[test_idxs[fold]]
         ml_sequence_prev_EM = []
@@ -1532,19 +1706,19 @@ def cross_validate_sustain_model(data,
         samples_sequence_cval = []
         samples_f_cval = []
         for s in range(N_S_max):
-            ml_sequence_EM, ml_f_EM, ml_likelihood_EM, ml_sequence_mat_EM, ml_f_mat_EM, ml_likelihood_mat_EM = estimate_ml_sustain_model_nplus1_clusters(
-                data_train,
-                min_biomarker_zscore,
-                max_biomarker_zscore,
-                std_biomarker_zscore,
-                stage_zscore,
-                stage_biomarker_index,
-                ml_sequence_prev_EM,
-                ml_f_prev_EM,
-                N_startpoints,
-                likelihood_flag)
-            with open(output_folder + '/' + dataset_name + '_EM_' + str(s) + '_Seq_Fold' + str(fold) + '.csv',
-                      'w') as f:
+            #expectation maximisation
+            ml_sequence_EM,ml_f_EM,ml_likelihood_EM,ml_sequence_mat_EM,ml_f_mat_EM,ml_likelihood_mat_EM = estimate_ml_sustain_model_nplus1_clusters(data_train,
+                                                                                                                                                    min_biomarker_zscore,
+                                                                                                                                                    max_biomarker_zscore,
+                                                                                                                                                    std_biomarker_zscore,
+                                                                                                                                                    stage_zscore,
+                                                                                                                                                    stage_biomarker_index,
+                                                                                                                                                    ml_sequence_prev_EM,
+                                                                                                                                                    ml_f_prev_EM,
+                                                                                                                                                    N_startpoints,
+                                                                                                                                                    likelihood_flag)
+            with open(output_folder+'/'+dataset_name+'_EM_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
+                print("\n"+ "Writing results to disk" + "\n")
                 writer = csv.writer(f)
                 writer.writerows(ml_sequence_EM)
                 writer.writerow([ml_likelihood_EM])
@@ -1553,19 +1727,18 @@ def cross_validate_sustain_model(data,
                 writer.writerow([ml_likelihood_mat_EM])
             seq_init = ml_sequence_EM
             f_init = ml_f_EM
-            ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = estimate_uncertainty_sustain_model(
-                data_train,
-                min_biomarker_zscore,
-                max_biomarker_zscore,
-                std_biomarker_zscore,
-                stage_zscore,
-                stage_biomarker_index,
-                seq_init,
-                f_init,
-                N_iterations_MCMC,
-                likelihood_flag)
-            with open(output_folder + '/' + dataset_name + '_MCMC_' + str(s) + '_Seq_Fold' + str(fold) + '.csv',
-                      'w') as f:
+            #MCMC
+            ml_sequence,ml_f,ml_likelihood,samples_sequence,samples_f,samples_likelihood = estimate_uncertainty_sustain_model(data_train,
+                                                                                                                              min_biomarker_zscore,
+                                                                                                                              max_biomarker_zscore,
+                                                                                                                              std_biomarker_zscore,
+                                                                                                                              stage_zscore,
+                                                                                                                              stage_biomarker_index,
+                                                                                                                              seq_init,
+                                                                                                                              f_init,
+                                                                                                                              N_iterations_MCMC,
+                                                                                                                              likelihood_flag)
+            with open(output_folder+'/'+dataset_name+'_MCMC_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
                 writer = csv.writer(f)
                 writer.writerows(ml_sequence)
                 writer.writerows(ml_f)
@@ -1573,6 +1746,7 @@ def cross_validate_sustain_model(data,
                 writer.writerows(samples_sequence)
                 writer.writerows(samples_f)
                 writer.writerows(samples_likelihood)
+
             samples_likelihood_subj_test = evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data_test,
                                                                                                       samples_sequence,
                                                                                                       samples_f,
@@ -1610,7 +1784,7 @@ def cross_validate_sustain_model(data,
                                  samples_likelihood,
                                  cval=True)
     """
-
+    return None
 
 def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
                                                                samples_sequence,
@@ -1621,6 +1795,12 @@ def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
                                                                stage_zscore,
                                                                stage_biomarker_index,
                                                                likelihood_flag):
+    '''
+
+    Function to 
+
+    '''
+
     # Take MCMC samples of the uncertainty in the SuStaIn model parameters
     M = data.shape[0]
     n_iterations = samples_sequence.shape[2]
@@ -1628,19 +1808,18 @@ def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
     for i in range(n_iterations):
         #        if i%(n_iterations/10)==0:
         #            print('Iteration',i,'of',n_iterations,',',float(i)/float(n_iterations)*100.,'% complete')
-        S = samples_sequence[:, :, i]
-        f = samples_f[:, i]
-        _, likelihood_sample_subj, _, _, _ = calculate_likelihood_mixturelinearzscoremodels(data,
-                                                                                            min_biomarker_zscore,
-                                                                                            max_biomarker_zscore,
-                                                                                            std_biomarker_zscore,
-                                                                                            stage_zscore,
-                                                                                            stage_biomarker_index,
-                                                                                            S,
-                                                                                            f,
-                                                                                            likelihood_flag)
-        samples_likelihood_subj[:, i] = likelihood_sample_subj
-
+        S = samples_sequence[:,:,i]
+        f = samples_f[:,i]
+        _,likelihood_sample_subj,_,_,_ = calculate_likelihood_mixturelinearzscoremodels(data,
+                                                                                        min_biomarker_zscore,max_biomarker_zscore,
+                                                                                        std_biomarker_zscore,
+                                                                                        stage_zscore,
+                                                                                        stage_biomarker_index,
+                                                                                        S,
+                                                                                        f,
+                                                                                        likelihood_flag)
+        samples_likelihood_subj[:,i] = likelihood_sample_subj
+        
     return samples_likelihood_subj
 
 
@@ -1710,10 +1889,9 @@ def subtype_and_stage_individuals_selectsubtypethenstage(data,
 
     return ml_subtype, ml_stage
 
-
+# own functions for optimisation
 def calc_coeff(sig):
     return 1. / np.sqrt(np.pi * 2.0) * sig
-
 
 def calc_exp(x, mu, sig):
     x = (x - mu) / sig

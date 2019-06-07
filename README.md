@@ -1,6 +1,5 @@
 pySuStaIn
 ============
-Python translation of the Subtype and Stage Inference (SuStaIn) model, including an example using simulated data.
 
 SuStaIn papers
 ============
@@ -11,3 +10,10 @@ Dependencies
 - [NumPy](https://github.com/numpy/numpy)
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
+
+
+
+Parallelisation
+===============
+
+
