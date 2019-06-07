@@ -181,7 +181,7 @@ def run_sustain_algorithm(data,
                                      s,
                                      samples_likelihood)
         ax0.plot(range(N_iterations_MCMC),samples_likelihood)
-        
+        plt.show()
     #saving the figure
     fig0.savefig( 'MCMC_likelihood' + str(N_iterations_MCMC) + '.png', bbox_inches = 'tight')
 
@@ -577,7 +577,7 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
     p_perm_k = np.zeros((M,N+1,N_S))
     
     for s in range(N_S):
-        if likelihood_flag=='Exact':
+        if likelihood_flag=='Approx':
             p_perm_k[:,:,s] = calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                                                   min_biomarker_zscore,
                                                                                   max_biomarker_zscore,
@@ -587,7 +587,7 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
                                                                                   S[s])
         else:
             # FIXME: test this function
-            p_perm_k[:,:,s] = calculate_likelihood_stage_linearzscoreModel(data,
+            p_perm_k[:,:,s] = calculate_likelihood_stage_linearzscoremodel(data,
                                                                            min_biomarker_zscore,
                                                                            max_biomarker_zscore,
                                                                            std_biomarker_zscore,
@@ -716,7 +716,6 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     for j in range(N+1):
         x                   = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
         p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
-
     """
     # faster - do the tiling once
     stage_value_tiled = np.tile(stage_value, (M, 1))
@@ -725,7 +724,6 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
         stage_value_tiled_j = stage_value_tiled[:, j].reshape(M, N_biomarkers)
         x = (data - stage_value_tiled_j) / sigmat
         p_perm_k[:, j] = coeff + np.sum(factor - .5 * np.square(x), 1)
-
     
     p_perm_k = np.exp(p_perm_k)
 
@@ -859,7 +857,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
     p_perm_k = np.zeros((M,N+1,N_S))
 
     for s in range(N_S):
-        if likelihood_flag=='Exact':
+        if likelihood_flag=='Approx':
             p_perm_k[:,:,s] = calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                                                   min_biomarker_zscore,
                                                                                   max_biomarker_zscore,
@@ -923,7 +921,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                 new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to,N-1)]])
                 possible_sequences[index,:] = new_sequence
             
-                if likelihood_flag=='Exact':
+                if likelihood_flag=='Approx':
                     possible_p_perm_k[:,:,index] = calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                                                                        min_biomarker_zscore,
                                                                                                        max_biomarker_zscore,
@@ -1701,9 +1699,3 @@ def calc_exp(x,mu,sig):
 
 def normPdf(x,mu,sig):
     return calc_coeff*calc_exp
-
-def linspace_local(a, b, N):
-    return a + (b-a)/(N-1.) * np.arange(N)
-
-def linspace_local2(a, b, N, arange_N):
-    return a + (b-a)/(N-1.) * arange_N

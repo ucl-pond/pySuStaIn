@@ -14,7 +14,7 @@ def main():
     validate = False
     
     N = 5
-    M = 20
+    M = 100
     N_S_gt = 3
     Z_vals = np.array([[1,2,3]]*N)
     IX_vals = np.array([[x for x in range(N)]]*3).T
@@ -35,14 +35,13 @@ def main():
     for i in range(len(stage_zscore)):
         SuStaInStageLabels.append('B'+str(stage_biomarker_index[i])+' - Z'+str(stage_zscore[i]))
 
-    gt_f = [1] + [0.5*x for x in range(N_S_gt-1)]
+    gt_f = [1+0.5*x for x in range(N_S_gt)]
     gt_f = [x/sum(gt_f) for x in gt_f][::-1]
     gt_sequence = generate_random_sustain_model(stage_zscore,stage_biomarker_index,N_S_gt)
     N_k_gt = np.array(stage_zscore).shape[1]+1
 
     subtypes = np.random.choice(range(N_S_gt),M,replace=True,p=gt_f)
     stages = np.ceil(np.random.rand(M,1)*(N_k_gt+1))-1
-
     data, data_denoised, stage_value = generate_data_sustain(subtypes,
                                                              stages,
                                                              gt_sequence,
@@ -51,20 +50,11 @@ def main():
                                                              std_biomarker_zscore,
                                                              stage_zscore,
                                                              stage_biomarker_index)
-    """
-    numY, numX = (int(math.ceil(math.sqrt(data.shape[1]))),
-                  int(round(math.sqrt(data.shape[1]))))
-    fig, ax = plt.subplots(numX, numY)
-    for i in range(data.shape[1]):
-        ax[int(math.floor((i)/numY)), int(i % numY)].hist(data[:,i])
-    print np.min(data),np.max(data)
-    plt.show()
-    """
     N_startpoints = 25
     N_S_max = 3
     N_iterations_MCMC = int(1e6)
     
-    likelihood_flag = 'Exact'
+    likelihood_flag = 'Approx'
     output_folder = 'test'
     dataset_name = 'test'
     samples_sequence, samples_f = run_sustain_algorithm(data,

@@ -10,33 +10,31 @@ def generate_data_sustain(subtypes,stages,gt_ordering,min_biomarker_zscore,
                           stage_zscore,stage_biomarker_index):
 
     N = stage_biomarker_index.shape[1]
-
-    N_S = gt_ordering.shape[0]
-
+    N_S = gt_ordering.shape[0]    
     possible_biomarkers = np.unique(stage_biomarker_index)
     B = len(possible_biomarkers)
-
     stage_value = np.zeros((B,N+2,N_S))
+    
     for s in range(N_S):
-        S = gt_ordering
+        S = gt_ordering[s,:]
         S_inv = np.array([0]*N)
         S_inv[S.astype(int)] = np.arange(N)
         for i in range(B):
             b = possible_biomarkers[i]
-            event_location = [x for y in [[0], S_inv[(stage_biomarker_index==b)[0]], [N]] for x in y]
-            event_value = [x for y in [[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index==b], [max_biomarker_zscore[i]]] for x in y]
+            event_location = np.concatenate([[0], S_inv[(stage_biomarker_index == b)[0]], [N]])
+            event_value = np.concatenate([[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index == b], [max_biomarker_zscore[i]]])
             for j in range(len(event_location)-1):
                 if j == 0: # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
-                    index = range(event_location[j],event_location[j+1]+2)
+                    index = np.arange(event_location[j],event_location[j+1]+2)
+                    stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
                 else:
-                    index = range(event_location[j]+1,event_location[j+1]+2)
-                stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],len(index))
+                    index = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                    stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
     M = stages.shape[0]
     data_denoised = np.zeros((M,B))
     for m in range(M):
-        data_denoised[m,:] = stage_value[:,int(stages[m]),subtypes[m]-1]
-
-    data = data_denoised + [x*y for x,y in zip(np.random.randn(M,B),np.array([[x]*M for x in std_biomarker_zscore]).T)] # this will produce different random numbers to Matlab
+        data_denoised[m,:] = stage_value[:,int(stages[m]),subtypes[m]]
+    data = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
     return data, data_denoised, stage_value
 
 def generate_random_sustain_model(stage_zscore, stage_biomarker_index, N_S):
