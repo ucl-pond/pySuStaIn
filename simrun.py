@@ -8,8 +8,6 @@ from matplotlib import pyplot as plt
 from simfuncs import generate_random_sustain_model, generate_data_sustain
 from funcs import run_sustain_algorithm, cross_validate_sustain_model
 
-import math
-
 def main():
     # cross-validation
     validate = False
