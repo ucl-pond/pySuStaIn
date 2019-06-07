@@ -1,5 +1,5 @@
 ###
-# pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
+# pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41468-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 ###
 import numpy as np
