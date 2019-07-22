@@ -7,8 +7,13 @@ import numpy as np
 from matplotlib import pyplot as plt
 from simfuncs import generate_random_sustain_model, generate_data_sustain
 from funcs import run_sustain_algorithm, cross_validate_sustain_model
+import os
+from sklearn.model_selection import KFold, StratifiedKFold
+from multiprocessing import Pool, cpu_count
+import functools
 
 def main():
+
     # cross-validation
     validate = False
     
@@ -38,7 +43,7 @@ def main():
     gt_f = [x/sum(gt_f) for x in gt_f][::-1]
     # ground truth sequence for each subtype
     gt_sequence = generate_random_sustain_model(stage_zscore,stage_biomarker_index,N_S_gt)
-
+    
     N_k_gt = np.array(stage_zscore).shape[1]+1
     subtypes = np.random.choice(range(N_S_gt),M,replace=True,p=gt_f)
     stages = np.ceil(np.random.rand(M,1)*(N_k_gt+1))-1
@@ -51,10 +56,11 @@ def main():
                                                              stage_zscore,
                                                              stage_biomarker_index)
     # number of starting points 
-    N_startpoints = 25 
+    N_startpoints = 25
     # maximum number of subtypes 
     N_S_max = 3
     N_iterations_MCMC = int(1e6)
+    N_iterations_MCMC_opt = int(1e4)
     
     likelihood_flag = 'Approx'
     output_folder = 'test3'
@@ -71,7 +77,8 @@ def main():
                                                         N_iterations_MCMC,
                                                         likelihood_flag,
                                                         output_folder,
-                                                        dataset_name)
+                                                        dataset_name,
+                                                        N_iterations_MCMC_opt)
 
     if validate:
         ### USER DEFINED INPUT: START
@@ -82,7 +89,50 @@ def main():
         select_fold = []
         target = []
         ### USER DEFINED INPUT: END
-                
+        
+        if not test_idxs:
+            print(
+                '!!!CAUTION!!! No user input for cross-validation fold selection - using automated stratification. Only do this if you know what you are doing!')
+            N_folds = 10
+            if target:
+                cv = StratifiedKFold(n_splits=N_folds, shuffle=True)
+                cv_it = cv.split(data, target)
+            else:
+                cv = KFold(n_splits=N_folds, shuffle=True)
+                cv_it = cv.split(data)
+            for train, test in cv_it:
+                test_idxs.append(test)
+            test_idxs = np.array(test_idxs)
+
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+
+        if select_fold:
+            test_idxs = test_idxs[select_fold]
+        Nfolds = len(test_idxs)
+
+        num_cores = cpu_count()
+        pool = Pool(num_cores)
+        copier = functools.partial(cross_validate_sustain_model,
+                                   data=data,
+                                   test_idxs=test_idxs,
+                                   min_biomarker_zscore=min_biomarker_zscore,
+                                   max_biomarker_zscore=max_biomarker_zscore,
+                                   std_biomarker_zscore=std_biomarker_zscore,
+                                   stage_zscore=stage_zscore,
+                                   stage_biomarker_index=stage_biomarker_index,
+                                   N_startpoints=N_startpoints,
+                                   N_S_max=N_S_max,
+                                   N_iterations_MCMC=N_iterations_MCMC,
+                                   likelihood_flag=likelihood_flag,
+                                   output_folder=output_folder,
+                                   dataset_name=dataset_name,
+                                   select_fold=select_fold,
+                                   target=target,
+                                   n_mcmc_opt_its=N_iterations_MCMC_opt)
+        print(pool.map(copier, range(Nfolds)))
+        
+        """
         cross_validate_sustain_model(data,
                                      test_idxs,
                                      min_biomarker_zscore,
@@ -98,6 +148,7 @@ def main():
                                      dataset_name,
                                      select_fold,
                                      target)
+        """
 
     plt.show()
 
