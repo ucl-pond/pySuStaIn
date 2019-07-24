@@ -419,41 +419,6 @@ def find_ml_linearzscoremodel(data,
         ml_sequence_mat[:, :, i] = par_mat[i, 0]
         ml_f_mat[:, i] = par_mat[i, 1]
         ml_likelihood_mat[i] = par_mat[i, 2]    
-    """
-    terminate = 0
-    startpoint = 0
-    #temp
-    seq_mat = []
-    #temp
-    while terminate == 0:
-
-        print(' ++ startpoint', startpoint)
-        # randomly initialise the sequence of the linear z-score model
-        seq_init = initialise_sequence_linearzscoremodel(0,
-                                                         stage_zscore,
-                                                         stage_biomarker_index)
-        #temp
-        seq_mat.append(seq_init)
-        #temp
-        f_init = [1]
-        this_ml_sequence, this_ml_f, this_ml_likelihood, _, _, _ = perform_em_mixturelinearzscoremodels(0,
-                                                                                                        data,
-                                                                                                        min_biomarker_zscore,
-                                                                                                        max_biomarker_zscore,
-                                                                                                        std_biomarker_zscore,
-                                                                                                        stage_zscore,
-                                                                                                        stage_biomarker_index,
-                                                                                                        seq_init,
-                                                                                                        f_init,
-                                                                                                        likelihood_flag)
-        ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-        ml_f_mat[:, startpoint] = this_ml_f
-        ml_likelihood_mat[startpoint] = this_ml_likelihood
-
-        if startpoint == (N_startpoints - 1):
-            terminate = 1
-        startpoint += 1
-    """
     ix = np.argmax(ml_likelihood_mat)
     ml_sequence = ml_sequence_mat[:, :, ix]
     ml_f = ml_f_mat[:, ix]
@@ -801,12 +766,14 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     sigmat = np.tile(std_biomarker_zscore, (M, 1))
     factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
     coeff = np.log(1. / float(N + 1))
+
     stage_value_tiled = np.tile(stage_value, (M, 1))
     N_biomarkers = stage_value.shape[0]
     for j in range(N + 1):
         stage_value_tiled_j = stage_value_tiled[:, j].reshape(M, N_biomarkers)
         x = (data - stage_value_tiled_j) / sigmat
-        p_perm_k[:, j] = coeff + np.sum(factor - .5 * np.square(x), 1)        
+        p_perm_k[:, j] = coeff + np.sum(factor - .5 * np.square(x), 1)
+        
     p_perm_k = np.exp(p_perm_k)
 
     return p_perm_k
@@ -1185,9 +1152,6 @@ def find_ml_mixture2linearzscoremodels(data,
      previous outputs _mat - same as before but for each start point
 
     '''
-    ##################################################################################################################################FIXME CHECK
-    np.random.seed()
-    
     N_S = 2
 
     ml_sequence_mat = np.zeros((N_S, stage_zscore.shape[1], N_startpoints))
@@ -1226,58 +1190,6 @@ def find_ml_mixture2linearzscoremodels(data,
         ml_sequence_mat[:, :, i] = par_mat[i, 0]
         ml_f_mat[:, i] = par_mat[i, 1]
         ml_likelihood_mat[i] = par_mat[i, 2]
-    """
-    terminate = 0
-    startpoint = 0
-    while terminate == 0:
-        print(' ++ startpoint', startpoint)
-        # randomly initialise individuals as belonging to one of the two subtypes (clusters)
-        min_N_cluster = 0
-        while min_N_cluster == 0:
-            cluster_assignment = np.array([np.ceil(x) for x in N_S * np.random.rand(data.shape[0])]).astype(int)
-            temp_N_cluster = np.zeros(N_S)
-            for s in range(1, N_S + 1):
-                temp_N_cluster = np.sum((cluster_assignment == s).astype(int),
-                                        0)  # FIXME? this means the last index always defines the sum...
-            min_N_cluster = min([temp_N_cluster])
-        # initialise the stages of the two linear z-score models by fitting a
-        # single linear z-score model to each of the two sets of individuals
-        seq_init = np.zeros((N_S, stage_zscore.shape[1]))
-        for s in range(N_S):
-            temp_data = data[cluster_assignment.reshape(cluster_assignment.shape[0], ) == (s + 1), :]
-            temp_seq_init = initialise_sequence_linearzscoremodel(0,
-                                                                  stage_zscore,
-                                                                  stage_biomarker_index)
-            seq_init[s, :], _, _, _, _, _ = perform_em_mixturelinearzscoremodels(0,
-                                                                                 temp_data,
-                                                                                 min_biomarker_zscore,
-                                                                                 max_biomarker_zscore,
-                                                                                 std_biomarker_zscore,
-                                                                                 stage_zscore,
-                                                                                 stage_biomarker_index,
-                                                                                 temp_seq_init,
-                                                                                 [1],
-                                                                                 likelihood_flag)
-        f_init = np.array([1.] * N_S) / float(N_S)
-        # optimise the mixture of two linear z-score models from the
-        # initialisation
-        this_ml_sequence, this_ml_f, this_ml_likelihood, _, _, _ = perform_em_mixturelinearzscoremodels(0,
-                                                                                                        data,
-                                                                                                        min_biomarker_zscore,
-                                                                                                        max_biomarker_zscore,
-                                                                                                        std_biomarker_zscore,
-                                                                                                        stage_zscore,
-                                                                                                        stage_biomarker_index,
-                                                                                                        seq_init,
-                                                                                                        f_init,
-                                                                                                        likelihood_flag)
-        ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-        ml_f_mat[:, startpoint] = this_ml_f
-        ml_likelihood_mat[startpoint] = this_ml_likelihood
-        if startpoint == (N_startpoints - 1):
-            terminate = 1
-        startpoint += 1
-    """
     ix = np.where(ml_likelihood_mat == max(ml_likelihood_mat))
     ix = ix[0]
     ml_sequence = ml_sequence_mat[:, :, ix]
@@ -1366,17 +1278,15 @@ def find_ml_mixturelinearzscoremodels(data,
 
     pool = multiprocessing.Pool(num_cores)
     # instantiate function as class to pass to pool.map
-    seq_mat = np.dstack(seq_init)
-    print ('?',seq_mat.shape)
-    temp = []
+    seq_mat = []
     for i in range(N_startpoints):
-        temp.append(seq_init)
-    seq_mat = np.array(temp)
-    print ('!',seq_mat.shape)
-    temp = []
+        seq_mat.append(seq_init)
+    seq_mat = np.array(seq_mat)
+    f_mat = []
     for i in range(N_startpoints):
-        temp.append(f_init)
-    f_mat = np.array(temp)
+        f_mat.append(f_init)
+    f_mat = np.array(f_mat)
+
     copier = partial(perform_em_mixturelinearzscoremodels,
                      data=data,
                      min_biomarker_zscore=min_biomarker_zscore,
@@ -1394,27 +1304,6 @@ def find_ml_mixturelinearzscoremodels(data,
         ml_sequence_mat[:, :, i] = par_mat[i, 0]
         ml_f_mat[:, i] = par_mat[i, 1]
         ml_likelihood_mat[i] = par_mat[i, 2]        
-    """
-    while terminate == 0:
-        print(' ++ startpoint', startpoint)
-        this_ml_sequence, this_ml_f, this_ml_likelihood, _, _, _ = perform_em_mixturelinearzscoremodels(0,
-                                                                                                        data,
-                                                                                                        min_biomarker_zscore,
-                                                                                                        max_biomarker_zscore,
-                                                                                                        std_biomarker_zscore,
-                                                                                                        stage_zscore,
-                                                                                                        stage_biomarker_index,
-                                                                                                        seq_init,
-                                                                                                        f_init,
-                                                                                                        likelihood_flag)
-        ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-        ml_f_mat[:, startpoint] = this_ml_f
-        ml_likelihood_mat[startpoint] = this_ml_likelihood
-
-        if startpoint == (N_startpoints - 1):
-            terminate = 1
-        startpoint = startpoint + 1
-    """
     ix = np.where(ml_likelihood_mat == max(ml_likelihood_mat))
     ix = ix[0]
     ml_sequence = ml_sequence_mat[:, :, ix]

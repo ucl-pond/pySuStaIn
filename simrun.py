@@ -18,7 +18,7 @@ def main():
     validate = False
     
     N = 5  # number of biomarkers
-    M = 100 # number of observations ( e.g. subjects )
+    M = 20 # number of observations ( e.g. subjects )
     N_S_gt = 3 # number of ground truth subtypes
     Z_vals = np.array([[1,2,3]]*N) # Z-scores for each biomarker
     IX_vals = np.array([[x for x in range(N)]]*3).T
