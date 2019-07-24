@@ -17,8 +17,8 @@ def main():
     # cross-validation
     validate = False
     
-    N = 5  # number of biomarkers
-    M = 20 # number of observations ( e.g. subjects )
+    N = 10  # number of biomarkers
+    M = 100 # number of observations ( e.g. subjects )
     N_S_gt = 3 # number of ground truth subtypes
     Z_vals = np.array([[1,2,3]]*N) # Z-scores for each biomarker
     IX_vals = np.array([[x for x in range(N)]]*3).T
@@ -63,7 +63,7 @@ def main():
     N_iterations_MCMC_opt = int(1e4)
     
     likelihood_flag = 'Approx'
-    output_folder = 'test3'
+    output_folder = 'test'
     dataset_name = 'test'
     
     samples_sequence, samples_f = run_sustain_algorithm(data,
@@ -130,25 +130,7 @@ def main():
                                    select_fold=select_fold,
                                    target=target,
                                    n_mcmc_opt_its=N_iterations_MCMC_opt)
-        print(pool.map(copier, range(Nfolds)))
-        
-        """
-        cross_validate_sustain_model(data,
-                                     test_idxs,
-                                     min_biomarker_zscore,
-                                     max_biomarker_zscore,
-                                     std_biomarker_zscore,
-                                     stage_zscore,
-                                     stage_biomarker_index,
-                                     N_startpoints,
-                                     N_S_max,
-                                     N_iterations_MCMC,
-                                     likelihood_flag,
-                                     output_folder,
-                                     dataset_name,
-                                     select_fold,
-                                     target)
-        """
+        pool.map(copier, range(Nfolds))
 
     plt.show()
 
