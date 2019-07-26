@@ -11,7 +11,10 @@ import os
 from sklearn.model_selection import KFold, StratifiedKFold
 import pickle
 from pathlib import Path
-from multiprocessing import pool
+import multiprocessing
+from functools import partial
+
+num_cores = multiprocessing.cpu_count()
 
 def prepare_data(pat_data, hc_data):
     '''
@@ -49,7 +52,8 @@ def run_sustain_algorithm(data,
                           N_iterations_MCMC,
                           likelihood_flag,
                           output_folder,
-                          dataset_name):
+                          dataset_name,
+                          n_mcmc_opt_its):
     '''
     Runs the sustain algorithm
     Inputs:
@@ -127,7 +131,8 @@ def run_sustain_algorithm(data,
                 seq_init,
                 f_init,
                 N_iterations_MCMC,
-                likelihood_flag)
+                likelihood_flag,
+                n_mcmc_opt_its)
             ml_sequence_prev_EM = ml_sequence_EM
             ml_f_prev_EM = ml_f_EM
 
@@ -315,17 +320,16 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                 this_seq_init = np.hstack((this_seq_init.T, this_ml_sequence_split[1])).T
                 this_f_init = np.array([1.] * N_S) / float(N_S)
                 print(' + Finding ML solution from hierarchical initialisation')
-                this_ml_sequence, this_ml_f, this_ml_likelihood, this_ml_sequence_mat, this_ml_f_mat, this_ml_likelihood_mat = find_ml_mixturelinearzscoremodels(
-                    data,
-                    min_biomarker_zscore,
-                    max_biomarker_zscore,
-                    std_biomarker_zscore,
-                    stage_zscore,
-                    stage_biomarker_index,
-                    this_seq_init,
-                    this_f_init,
-                    N_startpoints,
-                    likelihood_flag)
+                this_ml_sequence, this_ml_f, this_ml_likelihood, this_ml_sequence_mat, this_ml_f_mat, this_ml_likelihood_mat = find_ml_mixturelinearzscoremodels(data,
+                                                                                                                                                                 min_biomarker_zscore,
+                                                                                                                                                                 max_biomarker_zscore,
+                                                                                                                                                                 std_biomarker_zscore,
+                                                                                                                                                                 stage_zscore,
+                                                                                                                                                                 stage_biomarker_index,
+                                                                                                                                                                 this_seq_init,
+                                                                                                                                                                 this_f_init,
+                                                                                                                                                                 N_startpoints,
+                                                                                                                                                                 likelihood_flag)
                 # Choose the most probable SuStaIn model from the different
                 # possible SuStaIn models initialised by splitting each subtype
                 # in turn
@@ -396,36 +400,36 @@ def find_ml_linearzscoremodel(data,
      previous outputs _mat - same as before but for each start point
 
     '''
-    # FIXME: work in progress
-    n_cpu = 10
-
-    terminate = 0
-    startpoint = 0
-    startpoints = range( N_startpoints )
     ml_sequence_mat = np.zeros((1,stage_zscore.shape[1],N_startpoints))
     ml_f_mat = np.zeros((1,N_startpoints))
     ml_likelihood_mat = np.zeros(N_startpoints)
-    while terminate == 0:
-        print(' ++ startpoint', startpoint)
-        # randomly initialise the sequence of the linear z-score model
-        seq_init = initialise_sequence_linearzscoremodel(stage_zscore, stage_biomarker_index)
-        f_init = [1]
-        this_ml_sequence, this_ml_f, this_ml_likelihood, _, _, _ = perform_em_mixturelinearzscoremodels(data,
-                                                                                                        min_biomarker_zscore,
-                                                                                                        max_biomarker_zscore,
-                                                                                                        std_biomarker_zscore,
-                                                                                                        stage_zscore,
-                                                                                                        stage_biomarker_index,
-                                                                                                        seq_init,
-                                                                                                        f_init,
-                                                                                                        likelihood_flag)
-        ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-        ml_f_mat[:, startpoint] = this_ml_f
-        ml_likelihood_mat[startpoint] = this_ml_likelihood
 
-        if startpoint == (N_startpoints - 1):
-            terminate = 1
-        startpoint += 1
+    pool = multiprocessing.Pool(num_cores)
+    # instantiate function as class to pass to pool.map
+    # first calculate array of sequences - do this first or same random number will be used simultaneously on each processor
+    copier = partial(initialise_sequence_linearzscoremodel,
+                     stage_zscore=stage_zscore,
+                     stage_biomarker_index=stage_biomarker_index)
+    # will return shape (N_startpoints, 1)
+    seq_mat = np.array(pool.map(copier, range(N_startpoints)))
+    # now optimise
+    copier = partial(perform_em_mixturelinearzscoremodels,
+                     data=data,
+                     min_biomarker_zscore=min_biomarker_zscore,
+                     max_biomarker_zscore=max_biomarker_zscore,
+                     std_biomarker_zscore=std_biomarker_zscore,
+                     stage_zscore=stage_zscore,
+                     stage_biomarker_index=stage_biomarker_index,
+                     current_sequence=seq_mat,
+                     current_f=[1],
+                     likelihood_flag=likelihood_flag)
+    # will return shape (N_startpoints, 6)
+    par_mat = np.array(pool.map(copier, range(N_startpoints)))
+    # distribute to local matrices
+    for i in range(N_startpoints):
+        ml_sequence_mat[:, :, i] = par_mat[i, 0]
+        ml_f_mat[:, i] = par_mat[i, 1]
+        ml_likelihood_mat[i] = par_mat[i, 2]    
     ix = np.argmax(ml_likelihood_mat)
     ml_sequence = ml_sequence_mat[:, :, ix]
     ml_f = ml_f_mat[:, ix]
@@ -433,7 +437,9 @@ def find_ml_linearzscoremodel(data,
 
     return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-def initialise_sequence_linearzscoremodel(stage_zscore,stage_biomarker_index):
+def initialise_sequence_linearzscoremodel(dummy,
+                                          stage_zscore,
+                                          stage_biomarker_index):
     '''
      Randomly initialises a linear z-score model ensuring that the biomarkers
      are monotonically increasing
@@ -460,6 +466,11 @@ def initialise_sequence_linearzscoremodel(stage_zscore,stage_biomarker_index):
 
     '''
 
+    # ensure randomness across parallel processes by seeding numpy with process id
+    current = multiprocessing.current_process()
+    if current._identity:
+        np.random.seed()
+    
     N = np.array(stage_zscore).shape[1]
     S = np.zeros(N)
     for i in range(N):
@@ -486,7 +497,8 @@ def initialise_sequence_linearzscoremodel(stage_zscore,stage_biomarker_index):
     S = S.reshape(1, len(S))
     return S
 
-def perform_em_mixturelinearzscoremodels(data,
+def perform_em_mixturelinearzscoremodels(dummy,
+                                         data,
                                          min_biomarker_zscore,
                                          max_biomarker_zscore,
                                          std_biomarker_zscore,
@@ -517,6 +529,17 @@ def perform_em_mixturelinearzscoremodels(data,
     samples_likelihood:
 
     ''' 
+
+    # ensure randomness across parallel processes by seeding numpy with process id
+    current = multiprocessing.current_process()
+    if current._identity:
+        np.random.seed()
+        # this should only be the case if called in parallel - then there will be a current_sequence for each startpoint
+        if len(current_sequence.shape)==3:
+            current_sequence = current_sequence[dummy]
+        if len(np.array(current_f).shape)==2:
+            current_f = current_f[dummy]
+
 
     MaxIter = 100
 
@@ -720,7 +743,6 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
      in the SuStaIn model
 
     '''
-
     N = stage_biomarker_index.shape[1]
     S_inv = np.array([ 0 ] * N)
     S_inv[S.astype(int)] = np.arange(N)
@@ -753,11 +775,9 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
 
     # optimised likelihood calc - take log and only call np.exp once after loop
     sigmat = np.tile(std_biomarker_zscore, (M, 1))
-
     factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
     coeff = np.log(1. / float(N + 1))
 
-    # faster - do the tiling once
     stage_value_tiled = np.tile(stage_value, (M, 1))
     N_biomarkers = stage_value.shape[0]
     for j in range(N + 1):
@@ -919,6 +939,11 @@ def optimise_parameters_mixturelinearzscoremodels(data,
 
     '''
 
+    # ensure randomness across parallel processes by seeding numpy with process id
+    current = multiprocessing.current_process()
+    if current._identity:
+        np.random.seed()
+    
     M = data.shape[0]
     N_S = S_init.shape[0]
     N = stage_zscore.shape[1]
@@ -945,7 +970,7 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                                                                              std_biomarker_zscore,
                                                                              stage_zscore,
                                                                              stage_biomarker_index,
-                                                                             S_opt[s])
+                                                                             S_opt[s])            
     p_perm_k_weighted = p_perm_k * f_val_mat
     p_perm_k_norm = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (
     1, N + 1, N_S))  # the second summation axis is different to Matlab version
@@ -1039,6 +1064,46 @@ def optimise_parameters_mixturelinearzscoremodels(data,
 
     return S_opt, f_opt, likelihood_opt
 
+def split_clusters(thread,
+                   data,
+                   min_biomarker_zscore,
+                   max_biomarker_zscore,
+                   std_biomarker_zscore,
+                   stage_zscore,
+                   stage_biomarker_index,
+                   likelihood_flag,
+                   N_S):
+    # ensure randomness across parallel processes by seeding numpy with process id
+    current = multiprocessing.current_process()
+    np.random.seed()
+    
+    min_N_cluster = 0
+    while min_N_cluster == 0:
+        cluster_assignment = np.array([np.ceil(x) for x in N_S * np.random.rand(data.shape[0])]).astype(int)
+        temp_N_cluster = np.zeros(N_S)
+        for s in range(1, N_S + 1):
+            temp_N_cluster = np.sum((cluster_assignment == s).astype(int),0)  # FIXME? this means the last index always defines the sum...
+        min_N_cluster = min([temp_N_cluster])
+    # initialise the stages of the two linear z-score models by fitting a
+    # single linear z-score model to each of the two sets of individuals
+    seq_init = np.zeros((N_S, stage_zscore.shape[1]))
+    for s in range(N_S):
+        temp_data = data[cluster_assignment.reshape(cluster_assignment.shape[0], ) == (s + 1), :]
+        temp_seq_init = initialise_sequence_linearzscoremodel(0,
+                                                              stage_zscore,
+                                                              stage_biomarker_index)
+        seq_init[s, :], _, _, _, _, _ = perform_em_mixturelinearzscoremodels(0,
+                                                                             temp_data,
+                                                                             min_biomarker_zscore,
+                                                                             max_biomarker_zscore,
+                                                                             std_biomarker_zscore,
+                                                                             stage_zscore,
+                                                                             stage_biomarker_index,
+                                                                             temp_seq_init,
+                                                                             [1],
+                                                                             likelihood_flag)
+    return seq_init
+
 def find_ml_mixture2linearzscoremodels(data,
                                        min_biomarker_zscore,
                                        max_biomarker_zscore,
@@ -1098,60 +1163,44 @@ def find_ml_mixture2linearzscoremodels(data,
      previous outputs _mat - same as before but for each start point
 
     '''
-
     N_S = 2
-
-    terminate = 0
-    startpoint = 0
 
     ml_sequence_mat = np.zeros((N_S, stage_zscore.shape[1], N_startpoints))
     ml_f_mat = np.zeros((N_S, N_startpoints))
-    ml_likelihood_mat = np.zeros((N_startpoints, 1))
-    while terminate == 0:
-        print(' ++ startpoint', startpoint)
-        # randomly initialise individuals as belonging to one of the two subtypes (clusters)
-        min_N_cluster = 0
-        while min_N_cluster == 0:
-            cluster_assignment = np.array([np.ceil(x) for x in N_S * np.random.rand(data.shape[0])]).astype(int)
-            temp_N_cluster = np.zeros(N_S)
-            for s in range(1, N_S + 1):
-                temp_N_cluster = np.sum((cluster_assignment == s).astype(int),
-                                        0)  # FIXME? this means the last index always defines the sum...
-            min_N_cluster = min([temp_N_cluster])
-        # initialise the stages of the two linear z-score models by fitting a
-        # single linear z-score model to each of the two sets of individuals
-        seq_init = np.zeros((N_S, stage_zscore.shape[1]))
-        for s in range(N_S):
-            temp_data = data[cluster_assignment.reshape(cluster_assignment.shape[0], ) == (s + 1), :]
-            temp_seq_init = initialise_sequence_linearzscoremodel(stage_zscore, stage_biomarker_index)
-            seq_init[s, :], _, _, _, _, _ = perform_em_mixturelinearzscoremodels(temp_data,
-                                                                                 min_biomarker_zscore,
-                                                                                 max_biomarker_zscore,
-                                                                                 std_biomarker_zscore,
-                                                                                 stage_zscore,
-                                                                                 stage_biomarker_index,
-                                                                                 temp_seq_init,
-                                                                                 [1],
-                                                                                 likelihood_flag)
-        f_init = np.array([1.] * N_S) / float(N_S)
-        # optimise the mixture of two linear z-score models from the
-        # initialisation
-        this_ml_sequence, this_ml_f, this_ml_likelihood, _, _, _ = perform_em_mixturelinearzscoremodels(data,
-                                                                                                        min_biomarker_zscore,
-                                                                                                        max_biomarker_zscore,
-                                                                                                        std_biomarker_zscore,
-                                                                                                        stage_zscore,
-                                                                                                        stage_biomarker_index,
-                                                                                                        seq_init,
-                                                                                                        f_init,
-                                                                                                        likelihood_flag)
-        ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-        ml_f_mat[:, startpoint] = this_ml_f
-        ml_likelihood_mat[startpoint] = this_ml_likelihood
-        if startpoint == (N_startpoints - 1):
-            terminate = 1
-        startpoint += 1
+    ml_likelihood_mat = np.zeros((N_startpoints, 1))    
 
+    pool = multiprocessing.Pool(num_cores)
+    # instantiate function as class to pass to pool.map
+    # first calculate array of sequences - do this first or same random number will be used simultaneously on each processor
+    copier = partial(split_clusters,
+                     data=data,
+                     min_biomarker_zscore=min_biomarker_zscore,
+                     max_biomarker_zscore=max_biomarker_zscore,
+                     std_biomarker_zscore=std_biomarker_zscore,
+                     stage_zscore=stage_zscore,
+                     stage_biomarker_index=stage_biomarker_index,
+                     likelihood_flag=likelihood_flag,
+                     N_S=N_S)
+    # will return shape (N_startpoints, 1)
+    seq_mat = np.array(pool.map(copier, range(N_startpoints)))
+    # now optimise
+    copier = partial(perform_em_mixturelinearzscoremodels,
+                     data=data,
+                     min_biomarker_zscore=min_biomarker_zscore,
+                     max_biomarker_zscore=max_biomarker_zscore,
+                     std_biomarker_zscore=std_biomarker_zscore,
+                     stage_zscore=stage_zscore,
+                     stage_biomarker_index=stage_biomarker_index,
+                     current_sequence=seq_mat,
+                     current_f=np.array([1.] * N_S) / float(N_S),
+                     likelihood_flag=likelihood_flag)
+    # will return shape (N_startpoints, 6)
+    par_mat = np.array(pool.map(copier, range(N_startpoints)))
+    # distribute to local matrices
+    for i in range(N_startpoints):
+        ml_sequence_mat[:, :, i] = par_mat[i, 0]
+        ml_f_mat[:, i] = par_mat[i, 1]
+        ml_likelihood_mat[i] = par_mat[i, 2]
     ix = np.where(ml_likelihood_mat == max(ml_likelihood_mat))
     ix = ix[0]
     ml_sequence = ml_sequence_mat[:, :, ix]
@@ -1237,25 +1286,35 @@ def find_ml_mixturelinearzscoremodels(data,
     ml_sequence_mat = np.zeros((N_S, stage_zscore.shape[1], N_startpoints))
     ml_f_mat = np.zeros((N_S, N_startpoints))
     ml_likelihood_mat = np.zeros((N_startpoints, 1))
-    while terminate == 0:
-        print(' ++ startpoint', startpoint)
-        this_ml_sequence, this_ml_f, this_ml_likelihood, _, _, _ = perform_em_mixturelinearzscoremodels(data,
-                                                                                                        min_biomarker_zscore,
-                                                                                                        max_biomarker_zscore,
-                                                                                                        std_biomarker_zscore,
-                                                                                                        stage_zscore,
-                                                                                                        stage_biomarker_index,
-                                                                                                        seq_init,
-                                                                                                        f_init,
-                                                                                                        likelihood_flag)
-        ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-        ml_f_mat[:, startpoint] = this_ml_f
-        ml_likelihood_mat[startpoint] = this_ml_likelihood
 
-        if startpoint == (N_startpoints - 1):
-            terminate = 1
-        startpoint = startpoint + 1
+    pool = multiprocessing.Pool(num_cores)
+    # instantiate function as class to pass to pool.map
+    seq_mat = []
+    for i in range(N_startpoints):
+        seq_mat.append(seq_init)
+    seq_mat = np.array(seq_mat)
+    f_mat = []
+    for i in range(N_startpoints):
+        f_mat.append(f_init)
+    f_mat = np.array(f_mat)
 
+    copier = partial(perform_em_mixturelinearzscoremodels,
+                     data=data,
+                     min_biomarker_zscore=min_biomarker_zscore,
+                     max_biomarker_zscore=max_biomarker_zscore,
+                     std_biomarker_zscore=std_biomarker_zscore,
+                     stage_zscore=stage_zscore,
+                     stage_biomarker_index=stage_biomarker_index,
+                     current_sequence=seq_mat,
+                     current_f=f_mat,
+                     likelihood_flag=likelihood_flag)
+    # will return shape (N_startpoints, 6)
+    par_mat = np.array(pool.map(copier, range(N_startpoints)))
+    # distribute to local matrices
+    for i in range(N_startpoints):
+        ml_sequence_mat[:, :, i] = par_mat[i, 0]
+        ml_f_mat[:, i] = par_mat[i, 1]
+        ml_likelihood_mat[i] = par_mat[i, 2]        
     ix = np.where(ml_likelihood_mat == max(ml_likelihood_mat))
     ix = ix[0]
     ml_sequence = ml_sequence_mat[:, :, ix]
@@ -1273,7 +1332,8 @@ def estimate_uncertainty_sustain_model(data,
                                        seq_init,
                                        f_init,
                                        N_iterations_MCMC,
-                                       likelihood_flag):
+                                       likelihood_flag,
+                                       n_mcmc_opt_its):
     '''
      Estimate the uncertainty in the subtype progression patterns and
      proportion of individuals belonging to the SuStaIn model
@@ -1351,7 +1411,8 @@ def estimate_uncertainty_sustain_model(data,
                                                                                  stage_biomarker_index,
                                                                                  seq_init,
                                                                                  f_init,
-                                                                                 likelihood_flag)
+                                                                                 likelihood_flag,
+                                                                                 n_mcmc_opt_its)
     # Run the full MCMC algorithm to estimate the uncertainty
     ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = perform_mcmc_mixturelinearzscoremodels(data,
                                                                                                                                min_biomarker_zscore,
@@ -1376,9 +1437,10 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                      stage_biomarker_index,
                                                      seq_init,
                                                      f_init,
-                                                     likelihood_flag):
+                                                     likelihood_flag,
+                                                     n_iterations_MCMC_optimisation):
     # Optimise the perturbation size for the MCMC algorithm
-    n_iterations_MCMC_optimisation = int(1e4)  # FIXME: set externally
+    #    n_iterations_MCMC_optimisation = int(1e4)  # FIXME: set externally
 
     n_passes_optimisation = 3
 
@@ -1476,8 +1538,7 @@ def perform_mcmc_mixturelinearzscoremodels(data,
 
     samples_likelihood:
 
-    '''
-
+    '''    
     # Take MCMC samples of the uncertainty in the SuStaIn model parameters
     N = stage_zscore.shape[1]
     N_S = seq_init.shape[0]
@@ -1663,7 +1724,8 @@ def plot_sustain_model(samples_sequence,
     #     writer.writerow(samples_likelihood)
     return fig, ax
 
-def cross_validate_sustain_model(data,
+def cross_validate_sustain_model(fold,
+                                 data,
                                  test_idxs,
                                  min_biomarker_zscore,
                                  max_biomarker_zscore,
@@ -1677,7 +1739,8 @@ def cross_validate_sustain_model(data,
                                  output_folder,
                                  dataset_name,
                                  select_fold,
-                                 target):
+                                 target,
+                                 n_mcmc_opt_its):
     '''
     # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
     # and MCMC) on a training dataset and evaluating the model likelihood on a test
@@ -1687,114 +1750,76 @@ def cross_validate_sustain_model(data,
     # the variable 'select_fold' empty to iterate across folds sequentially.
     '''
 
-    if not test_idxs:
-        print(
-            '!!!CAUTION!!! No user input for cross-validation fold selection - using automated stratification. Only do this if you know what you are doing!')
-        N_folds = 10
-        if target:
-            cv = StratifiedKFold(n_splits=N_folds, shuffle=True)
-            cv_it = cv.split(data, target)
-        else:
-            cv = KFold(n_splits=N_folds, shuffle=True)
-            cv_it = cv.split(data)
-        for train, test in cv_it:
-            test_idxs.append(test)
-        test_idxs = np.array(test_idxs)
+    #    for fold in range(Nfolds):
+    print(fold)
+    # print('Cross-validating fold',fold,'of',Nfolds,'with index',test_idxs[fold])
+    data_train = data[np.array([x for x in range(data.shape[0]) if x not in test_idxs[fold]])]
+    data_test = data[test_idxs[fold]]
+    ml_sequence_prev_EM = []
+    ml_f_prev_EM = []
+    samples_sequence_cval = []
+    samples_f_cval = []
+    for s in range(N_S_max):
+        #expectation maximisation
+        ml_sequence_EM,ml_f_EM,ml_likelihood_EM,ml_sequence_mat_EM,ml_f_mat_EM,ml_likelihood_mat_EM = estimate_ml_sustain_model_nplus1_clusters(data_train,
+                                                                                                                                                min_biomarker_zscore,
+                                                                                                                                                max_biomarker_zscore,
+                                                                                                                                                std_biomarker_zscore,
+                                                                                                                                                stage_zscore,
+                                                                                                                                                stage_biomarker_index,
+                                                                                                                                                ml_sequence_prev_EM,
+                                                                                                                                                ml_f_prev_EM,
+                                                                                                                                                N_startpoints,
+                                                                                                                                                likelihood_flag)
+        with open(output_folder+'/'+dataset_name+'_EM_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
+            print("\n"+ "Writing results to disk" + "\n")
+            writer = csv.writer(f)
+            writer.writerows(ml_sequence_EM)
+            writer.writerow([ml_likelihood_EM])
+            writer.writerows(ml_sequence_mat_EM)
+            writer.writerow([ml_f_mat_EM])
+            writer.writerow([ml_likelihood_mat_EM])
+        seq_init = ml_sequence_EM
+        f_init = ml_f_EM
+        #MCMC
+        ml_sequence,ml_f,ml_likelihood,samples_sequence,samples_f,samples_likelihood = estimate_uncertainty_sustain_model(data_train,
+                                                                                                                          min_biomarker_zscore,
+                                                                                                                          max_biomarker_zscore,
+                                                                                                                          std_biomarker_zscore,
+                                                                                                                          stage_zscore,
+                                                                                                                          stage_biomarker_index,
+                                                                                                                          seq_init,
+                                                                                                                          f_init,
+                                                                                                                          N_iterations_MCMC,
+                                                                                                                          likelihood_flag,
+                                                                                                                          n_mcmc_opt_its)
+        with open(output_folder+'/'+dataset_name+'_MCMC_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
+            writer = csv.writer(f)
+            writer.writerows(ml_sequence)
+            writer.writerows(ml_f)
+            writer.writerow([ml_likelihood])
+            writer.writerows(samples_sequence)
+            writer.writerows(samples_f)
+            writer.writerows(samples_likelihood)
 
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+        samples_likelihood_subj_test = evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data_test,
+                                                                                                  samples_sequence,
+                                                                                                  samples_f,
+                                                                                                  min_biomarker_zscore,
+                                                                                                  max_biomarker_zscore,
+                                                                                                  std_biomarker_zscore,
+                                                                                                  stage_zscore,
+                                                                                                  stage_biomarker_index,
+                                                                                                  likelihood_flag)
+        with open(output_folder + '/' + dataset_name + '_OutOfSampleLikelihood_' + str(s) + '_Seq_Fold' + str(fold) + '.csv', 'w') as f:
+            writer = csv.writer(f)
+            writer.writerows(samples_likelihood_subj_test)
 
-    if select_fold:
-        test_idxs = test_idxs[select_fold]
-    Nfolds = len(test_idxs)
-
-    for fold in range(Nfolds):
-        # print('Cross-validating fold',fold,'of',Nfolds,'with index',test_idxs[fold])
-        data_train = data[np.array([x for x in range(data.shape[0]) if x not in test_idxs[fold]])]
-        data_test = data[test_idxs[fold]]
-        ml_sequence_prev_EM = []
-        ml_f_prev_EM = []
-        samples_sequence_cval = []
-        samples_f_cval = []
-        for s in range(N_S_max):
-            #expectation maximisation
-            ml_sequence_EM,ml_f_EM,ml_likelihood_EM,ml_sequence_mat_EM,ml_f_mat_EM,ml_likelihood_mat_EM = estimate_ml_sustain_model_nplus1_clusters(data_train,
-                                                                                                                                                    min_biomarker_zscore,
-                                                                                                                                                    max_biomarker_zscore,
-                                                                                                                                                    std_biomarker_zscore,
-                                                                                                                                                    stage_zscore,
-                                                                                                                                                    stage_biomarker_index,
-                                                                                                                                                    ml_sequence_prev_EM,
-                                                                                                                                                    ml_f_prev_EM,
-                                                                                                                                                    N_startpoints,
-                                                                                                                                                    likelihood_flag)
-            with open(output_folder+'/'+dataset_name+'_EM_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
-                print("\n"+ "Writing results to disk" + "\n")
-                writer = csv.writer(f)
-                writer.writerows(ml_sequence_EM)
-                writer.writerow([ml_likelihood_EM])
-                writer.writerows(ml_sequence_mat_EM)
-                writer.writerow([ml_f_mat_EM])
-                writer.writerow([ml_likelihood_mat_EM])
-            seq_init = ml_sequence_EM
-            f_init = ml_f_EM
-            #MCMC
-            ml_sequence,ml_f,ml_likelihood,samples_sequence,samples_f,samples_likelihood = estimate_uncertainty_sustain_model(data_train,
-                                                                                                                              min_biomarker_zscore,
-                                                                                                                              max_biomarker_zscore,
-                                                                                                                              std_biomarker_zscore,
-                                                                                                                              stage_zscore,
-                                                                                                                              stage_biomarker_index,
-                                                                                                                              seq_init,
-                                                                                                                              f_init,
-                                                                                                                              N_iterations_MCMC,
-                                                                                                                              likelihood_flag)
-            with open(output_folder+'/'+dataset_name+'_MCMC_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
-                writer = csv.writer(f)
-                writer.writerows(ml_sequence)
-                writer.writerows(ml_f)
-                writer.writerow([ml_likelihood])
-                writer.writerows(samples_sequence)
-                writer.writerows(samples_f)
-                writer.writerows(samples_likelihood)
-
-            samples_likelihood_subj_test = evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data_test,
-                                                                                                      samples_sequence,
-                                                                                                      samples_f,
-                                                                                                      min_biomarker_zscore,
-                                                                                                      max_biomarker_zscore,
-                                                                                                      std_biomarker_zscore,
-                                                                                                      stage_zscore,
-                                                                                                      stage_biomarker_index,
-                                                                                                      likelihood_flag)
-            with open(output_folder + '/' + dataset_name + '_OutOfSampleLikelihood_' + str(s) + '_Seq_Fold' + str(
-                    fold) + '.csv', 'w') as f:
-                writer = csv.writer(f)
-                writer.writerows(samples_likelihood_subj_test)
-
-            ml_sequence_prev_EM = ml_sequence_EM
-            ml_f_prev_EM = ml_f_EM
-            samples_sequence_cval += list(samples_sequence)
-            samples_f_cval += list(samples_f)
-    """
-    ###
-    # UNDER CONSTRUCTION
-    ###
-    samples_sequence_cval = np.array(samples_sequence_cval)
-    samples_f_cval = np.array(samples_f_cval)
-    biomarker_labels = np.array([str(x) for x in range(data.shape[1])])
-    fig, ax = plot_sustain_model(samples_sequence_cval,
-                                 samples_f_cval,
-                                 biomarker_labels,
-                                 stage_zscore,
-                                 stage_biomarker_index,
-                                 N_S_max,
-                                 output_folder,
-                                 dataset_name,
-                                 s,
-                                 samples_likelihood,
-                                 cval=True)
-    """
+        ml_sequence_prev_EM = ml_sequence_EM
+        ml_f_prev_EM = ml_f_EM
+        samples_sequence_cval += list(samples_sequence)
+        samples_f_cval += list(samples_f)
+    
     return None
 
 def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
