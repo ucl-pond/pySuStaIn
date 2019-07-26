@@ -38,6 +38,7 @@ def prepare_data(pat_data, hc_data):
     for column_number, (sample_mean, sample_std) in enumerate( zip( np.mean( hc_data, axis = 0),
                                                                     np.std( hc_data, axis = 0 ))):
         z_score_array[ :, column_number - 1 ] = ( pat_data[:,column_number - 1] - sample_mean)/ sample_std
+    #WIP: check signs
 
     return z_score_array
 
