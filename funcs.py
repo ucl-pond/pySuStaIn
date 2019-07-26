@@ -31,8 +31,8 @@ def prepare_data(pat_data, hc_data):
 
     '''
     z_score_array = np.zeros( pat_data.shape )
-    if (np.nunsum( pat_data ) > 0 ) or (np.nunsum(hc_data) > 0 ):
-        raise Exception("Patient or healthy control data has NaNs. Please remove or impute." )
+    if ((np.nunsum( pat_data ) > 0 ) or (np.nunsum(hc_data) > 0 )):
+        raise Exception("Patient or healthy control data have NaNs. Please remove or impute." )
     #calculate z-score
     for column_number, (sample_mean, sample_std) in enumerate( zip( np.mean( hc_data, axis = 0),
                                                                     np.std( hc_data, axis = 0 ))):
