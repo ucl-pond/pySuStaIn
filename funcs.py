@@ -13,19 +13,30 @@ import pickle
 from pathlib import Path
 from multiprocessing import pool
 
-def prepare_data(data, pat_hc_index):
+def prepare_data(pat_data, hc_data):
     '''
     prepares the data by normalising tha patient data, checking signs, and missing data
     for further modelling
     inputs:
     =======
-    data: an MxN Numpy array that corresponds to M observations for N biomarkers
-    pat_hc_index: an Nx1 Numpy array that has 1 for patients and 0 for controls
+    pat_data: an MxN Numpy array that corresponds to M observations for N biomarkers for patients
+    hc_data: an LxN Numpy array from healhty population that has L observations for N biomarkers
+    
     Outputs:
     =======
-    '''
+    z_score_array: an MxN numpy array of the Z-scores
 
-    return None
+    '''
+    z_score_array = np.zeros( pat_data.shape )
+    if (np.nunsum( pat_data ) > 0 ) or (np.nunsum(hc_data) > 0 ):
+        raise Exception:
+           print( " Patient or healthy control data has NaNs. Please remove or impute." )
+    #calculate z-score
+    for column_number, (sample_mean, sample_std) in enumerate( zip( np.mean( hc_data, axis = 0),
+                                                                    np.std( hc_data, axis = 0 ))):
+        z_score_array[ :, column_number - 1 ] = ( pat_data[:,column_number - 1] - sample_mean)/ sample_std
+
+    return z_score_array
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
