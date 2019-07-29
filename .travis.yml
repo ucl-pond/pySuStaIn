@@ -20,6 +20,7 @@ install:
         - pip install scipy
         - pip install matplotlib  
         - pip install numpy
+        - pip install sklearn
 # 'python' points to Python 2.7 on macOS but points to Python 3.7 on Linux and Windows
 # 'python3' is a 'command not found' error on Windows but 'py' works on Windows only
 script: python3 simrun.py || python simrun.py
