@@ -14,8 +14,6 @@ from pathlib import Path
 import multiprocessing
 from functools import partial
 
-num_cores = multiprocessing.cpu_count()
-num_cores = 10
 
 def prepare_data(pat_data, hc_data):
     '''

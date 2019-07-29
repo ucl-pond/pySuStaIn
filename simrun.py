@@ -17,6 +17,7 @@ def main():
     # cross-validation
     validate = False
     
+    num_cores = multiprocessing.cpu_count()
     N = 10  # number of biomarkers
     M = 100 # number of observations ( e.g. subjects )
     N_S_gt = 3 # number of ground truth subtypes
