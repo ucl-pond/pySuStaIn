@@ -78,7 +78,8 @@ def main():
                                                         likelihood_flag,
                                                         output_folder,
                                                         dataset_name,
-                                                        N_iterations_MCMC_opt)
+                                                        N_iterations_MCMC_opt, 
+                                                        num_cores)
 
     if validate:
         ### USER DEFINED INPUT: START

@@ -15,6 +15,7 @@ import multiprocessing
 from functools import partial
 
 num_cores = multiprocessing.cpu_count()
+num_cores = 10
 
 def prepare_data(pat_data, hc_data):
     '''
@@ -53,7 +54,8 @@ def run_sustain_algorithm(data,
                           likelihood_flag,
                           output_folder,
                           dataset_name,
-                          n_mcmc_opt_its):
+                          n_mcmc_opt_its,
+                          num_cores):
     '''
     Runs the sustain algorithm
     Inputs:
@@ -64,12 +66,13 @@ def run_sustain_algorithm(data,
     std_biomarker_zscore:
     stage_zscore:
     stage_biomarker_index:
-    N_startpoints:
+    N_startpoints: number of starting points, currently 25 is default
     N_S_max: maximum number of subtypes
     N_iterations_MCMC: number of iterations (default: 1e6)
-    likelihood_flag:
-    output_folder:
-    dataset_name:
+    likelihood_flag: Approximate or exact likelihood 
+    output_folder: folder to dump results
+    dataset_name: name that will be used in outputs
+    num_cores: number of cpu cores 
     Outputs
     =======
     '''
@@ -86,8 +89,6 @@ def run_sustain_algorithm(data,
         #        if pickle_filepath.exists():
         if False:
             print("Found pickle file: " + pickle_filename_s + ". Using pickled variables for " + str(s) + " subtype.")
-
-
             pickle_file = open(pickle_filename_s, 'rb')
 
             save_variables = pickle.load(pickle_file)
@@ -118,7 +119,8 @@ def run_sustain_algorithm(data,
                 ml_sequence_prev_EM,
                 ml_f_prev_EM,
                 N_startpoints,
-                likelihood_flag)
+                likelihood_flag,
+                num_cores)
             seq_init = ml_sequence_EM
             f_init = ml_f_EM
             ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = estimate_uncertainty_sustain_model(
@@ -196,7 +198,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                               ml_sequence_prev,
                                               ml_f_prev,
                                               N_startpoints,
-                                              likelihood_flag):
+                                              likelihood_flag, 
+                                              num_cores):
     '''
     Given the previous SuStaIn model, estimate the next model in the
     hierarchy (i.e. number of subtypes goes from N to N+1)
@@ -271,7 +274,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                                               stage_zscore,
                                                                                                               stage_biomarker_index,
                                                                                                               N_startpoints,
-                                                                                                              likelihood_flag)
+                                                                                                              likelihood_flag, 
+                                                                                                              num_cores  )
         print('Overall ML likelihood is',ml_likelihood)
     else:
         # If the number of subtypes is greater than 1, go through each subtype
@@ -355,7 +359,9 @@ def find_ml_linearzscoremodel(data,
                               stage_zscore,
                               stage_biomarker_index,
                               N_startpoints,
-                              likelihood_flag):
+                              likelihood_flag,
+                              num_cores
+                              ):
     ''' 
     Fit a linear z-score model
     
@@ -1739,8 +1745,8 @@ def cross_validate_sustain_model(fold,
                                  output_folder,
                                  dataset_name,
                                  select_fold,
-                                 target,
-                                 n_mcmc_opt_its):
+                                 target
+                                 ):
     '''
     # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
     # and MCMC) on a training dataset and evaluating the model likelihood on a test
@@ -1770,7 +1776,8 @@ def cross_validate_sustain_model(fold,
                                                                                                                                                 ml_sequence_prev_EM,
                                                                                                                                                 ml_f_prev_EM,
                                                                                                                                                 N_startpoints,
-                                                                                                                                                likelihood_flag)
+                                                                                                                                                likelihood_flag, 
+                                                                                                                                                num_cores)
         with open(output_folder+'/'+dataset_name+'_EM_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
             print("\n"+ "Writing results to disk" + "\n")
             writer = csv.writer(f)
@@ -1779,6 +1786,7 @@ def cross_validate_sustain_model(fold,
             writer.writerows(ml_sequence_mat_EM)
             writer.writerow([ml_f_mat_EM])
             writer.writerow([ml_likelihood_mat_EM])
+            writer.writerow([ml_f_EM])
         seq_init = ml_sequence_EM
         f_init = ml_f_EM
         #MCMC
@@ -1941,3 +1949,44 @@ def linspace_local(a, b, N):
 
 def linspace_local2(a, b, N, arange_N):
     return a + (b - a) / (N - 1.) * arange_N
+
+def read_sustain_EM_text_file( text_file ):
+    '''
+    Reads EM text file from previous runs of sustain
+    
+    inputs
+    ======
+    text_file: absolute path to the file  written by a previous run of 
+    
+    outputs
+    ========
+    output_dic: dictionary of required variables  for resuming sustain algorithm
+
+    '''
+    import re
+    with open(text_file, 'r' ) as log:
+        raw_text = log.readlines()
+    ml_sequence_EM = np.fromstring( raw_text[0].strip() , dtype=float, sep=',')
+    ml_likelihood_EM = float( raw_text[1].strip() )
+    #reg ex patterns to recover  matrices
+    fra_pat = '\[{2}(.*)\]{2}'
+    pat1 = '''^"(\[.*\])" "\[\[(.*)\]\]" "\[(.*)]"'''
+
+    ml_sequence_mat_EM_text = re.search( pat1, ' '.join( raw_text[2:] ).replace('\n', '') ).group(1)
+    ml_f_mat_EM_text = re.search( pat1, ' '.join( raw_text[2:] ).replace('\n', '') ).group(2)
+    ml_likelihood_mat_EM_text = re.search( pat1, ' '.join( raw_text[2:] ).replace('\n', '') ).group(3)
+    ml_likelihood_mat_EM = np.fromstring( ml_likelihood_mat_EM_text, dtype = float, sep  = ' ' )
+
+    ml_f_mat_EM = np.fromstring( ml_f_mat_EM_text, dtype = float, sep = ' ')
+    ml_sequence_mat_EM = [] 
+    for item in ml_sequence_mat_EM_text[1:-1].split(']","['):
+        ml_sequence_mat_EM.append( 
+                np.fromstring( item, dtype = float, sep  = ' ') )
+    ml_sequence_mat = np.fromstring( ml_likelihood_mat_EM_text, dtype = float, sep  = ' ')
+    ml_f_EM = np.fromstring( raw_text[-1].strip().replace('[', '').replace(']', ''),  dtype = float, sep  = ' ' )
+    output_dic = {}
+    for item in ['ml_sequence_EM','ml_likelihood_EM',
+                 'ml_sequence_mat_EM','ml_f_mat_EM',
+                 'ml_likelihood_mat_EM', 'ml_f_EM']:
+        output_dic[item] = eval(item)
+    return output_dic
