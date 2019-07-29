@@ -4,6 +4,7 @@
 # Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 ###
 import numpy as np
+import multiprocessing
 from matplotlib import pyplot as plt
 from simfuncs import generate_random_sustain_model, generate_data_sustain
 from funcs import run_sustain_algorithm, cross_validate_sustain_model
