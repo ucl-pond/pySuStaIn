@@ -114,7 +114,6 @@ def main():
             test_idxs = test_idxs[select_fold]
         Nfolds = len(test_idxs)
 
-        num_cores = cpu_count()
         pool = Pool(num_cores)
         copier = functools.partial(cross_validate_sustain_model,
                                    data=data,
