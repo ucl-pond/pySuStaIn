@@ -244,7 +244,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
     likelihood_flag: whether to use an exact method of inference - when set
     to 'Exact', the exact method is used, the approximate method is used for
     all other settings
-    
+   
+    num_cores: number of cores to use in multiprocessing to parallelise
     Outputs:
     =======
 

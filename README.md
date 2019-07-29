@@ -23,5 +23,4 @@ Dependencies
 
 Parallelisation
 ===============
-- TBA
-
+- pySuStaIn uses Python's `multiprocessing` module to parallelise expectation maximisation algorithms.
