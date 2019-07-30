@@ -676,6 +676,8 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
      likelihood_flag - whether to use an exact method of inference - when set
      to 'Exact', the exact method is used, the approximate method is used for
      all other settings
+     
+     covar -covariance matrix
     
     Outputs:
     ========
