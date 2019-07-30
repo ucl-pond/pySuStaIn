@@ -4,7 +4,7 @@
 # Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 ###
 import numpy as np
-from scipy.stats import norm
+from scipy.stats import norm, multivariate_normal
 from matplotlib import pyplot as plt
 import csv
 import os
@@ -763,16 +763,26 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     p_perm_k = np.zeros((M, N + 1))
 
     # optimised likelihood calc - take log and only call np.exp once after loop
-    sigmat = np.tile(std_biomarker_zscore, (M, 1))
-    factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
-    coeff = np.log(1. / float(N + 1))
+    covar=True
+    if covar:
+        sigmat = np.tile(np.outer(std_biomarker_zscore, std_biomarker_zscore), (M, 1, 1))
+    else:
+        sigmat = np.tile(std_biomarker_zscore, (M, 1))    
+        factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
+        coeff = np.log(1. / float(N + 1))
 
     stage_value_tiled = np.tile(stage_value, (M, 1))
     N_biomarkers = stage_value.shape[0]
     for j in range(N + 1):
         stage_value_tiled_j = stage_value_tiled[:, j].reshape(M, N_biomarkers)
-        x = (data - stage_value_tiled_j) / sigmat
-        p_perm_k[:, j] = coeff + np.sum(factor - .5 * np.square(x), 1)
+        if covar:
+            temp = []
+            for i in range(stage_value_tiled_j.shape[0]):
+                temp.append(1./(N+1.)*multivariate_normal.pdf(data[i,:],stage_value_tiled_j[i,:],sigmat[i]))
+            p_perm_k[:, j] = temp
+        else:
+            x = (data - stage_value_tiled_j) / sigmat
+            p_perm_k[:, j] = coeff + np.sum(factor - .5 * np.square(x), 1)        
         
     p_perm_k = np.exp(p_perm_k)
 
