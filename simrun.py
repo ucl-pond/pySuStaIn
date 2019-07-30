@@ -68,7 +68,8 @@ def main():
     output_folder = 'test'
     dataset_name = 'test'
     #covariance matrix must come from an independent healthy control population 
-    covar = np.cov(np.transpose(data) )
+    covar = np.rand( np.cov(np.transpose( data ) ).shape)
+    
     samples_sequence, samples_f = run_sustain_algorithm(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,
