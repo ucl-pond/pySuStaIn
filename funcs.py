@@ -333,7 +333,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                                                                                                  this_seq_init,
                                                                                                                                                                  this_f_init,
                                                                                                                                                                  N_startpoints,
-                                                                                                                                                                 likelihood_flag)
+                                                                                                                                                                 likelihood_flag,
+                                                                                                                                                                 num_cores)
                 # Choose the most probable SuStaIn model from the different
                 # possible SuStaIn models initialised by splitting each subtype
                 # in turn
@@ -1225,7 +1226,8 @@ def find_ml_mixturelinearzscoremodels(data,
                                       seq_init,
                                       f_init,
                                       N_startpoints,
-                                      likelihood_flag):
+                                      likelihood_flag,
+                                      num_cores):
     '''
      Fit a mixture of linear z-score models
     
