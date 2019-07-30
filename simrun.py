@@ -70,7 +70,8 @@ def main():
     #covariance matrix must come from an independent healthy control population , for 
     #demostration purposes we produce a random positive semi-definite matrix which is like a covariance
     #matrix
-    covar = np.random.rand( np.cov(np.transpose( data ) ).shape)
+    shape_cov = np.cov(np.transpose( data ) ).shape
+    covar = np.random.rand( shape_cov[0], shape_cov[1] )
     #make sure it is positive semi-definite
     covar = numpy.dot(covar,covar.transpose())
 
