@@ -81,7 +81,8 @@ def main():
                                                         output_folder,
                                                         dataset_name,
                                                         N_iterations_MCMC_opt, 
-                                                        num_cores)
+                                                        num_cores,
+                                                        covar = False)
 
     if validate:
         ### USER DEFINED INPUT: START
