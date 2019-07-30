@@ -56,7 +56,7 @@ def run_sustain_algorithm(data,
                           dataset_name,
                           n_mcmc_opt_its,
                           num_cores,
-                          covar = False):
+                          covar ):
     '''
     Runs the sustain algorithm
     Inputs:
@@ -282,7 +282,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                                               stage_biomarker_index,
                                                                                                               N_startpoints,
                                                                                                               likelihood_flag, 
-                                                                                                              num_cores  )
+                                                                                                              num_cores,
+                                                                                                              covar)
         print('Overall ML likelihood is',ml_likelihood)
     else:
         # If the number of subtypes is greater than 1, go through each subtype
@@ -370,7 +371,8 @@ def find_ml_linearzscoremodel(data,
                               stage_biomarker_index,
                               N_startpoints,
                               likelihood_flag,
-                              num_cores
+                              num_cores,
+                              covar
                               ):
     ''' 
     Fit a linear z-score model
