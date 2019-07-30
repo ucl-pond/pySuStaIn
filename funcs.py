@@ -1355,7 +1355,7 @@ def find_ml_mixturelinearzscoremodels(data,
                      current_sequence=seq_mat,
                      current_f=f_mat,
                      likelihood_flag=likelihood_flag,
-                     covar)
+                     covar=covar)
     # will return shape (N_startpoints, 6)
     par_mat = np.array(pool.map(copier, range(N_startpoints)))
     # distribute to local matrices
