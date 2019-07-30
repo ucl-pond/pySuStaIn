@@ -1239,7 +1239,7 @@ def find_ml_mixture2linearzscoremodels(data,
                      current_sequence=seq_mat,
                      current_f=np.array([1.] * N_S) / float(N_S),
                      likelihood_flag=likelihood_flag,
-                     covar)
+                     covar=covar)
     # will return shape (N_startpoints, 6)
     par_mat = np.array(pool.map(copier, range(N_startpoints)))
     # distribute to local matrices
