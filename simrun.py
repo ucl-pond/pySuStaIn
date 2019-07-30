@@ -61,8 +61,8 @@ def main():
     N_startpoints = 25
     # maximum number of subtypes 
     N_S_max = 3
-    N_iterations_MCMC = int(1e6)
-    N_iterations_MCMC_opt = int(1e4)
+    N_iterations_MCMC = int(1e4)
+    N_iterations_MCMC_opt = int(1e3)
     
     likelihood_flag = 'Approx'
     output_folder = 'test'
