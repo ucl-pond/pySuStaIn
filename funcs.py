@@ -36,8 +36,10 @@ def prepare_data(pat_data, hc_data):
     for column_number, (sample_mean, sample_std) in enumerate( zip( np.mean( hc_data, axis = 0),
                                                                     np.std( hc_data, axis = 0 ))):
         z_score_array[ :, column_number - 1 ] = ( pat_data[:,column_number - 1] - sample_mean)/ sample_std
-    #WIP: check signs
-
+        #WIP: check signs needs testing
+        if sample_mean > np.mean( pat_data[:, column_number - 1] ):
+            print('WARNING: flipping sign for column number '  + str( column_number - 1 ))
+            z_score_array[ :, column_number - 1 ] =  -1 * z_score_array[ :, column_number - 1 ]
     return z_score_array
 
 def run_sustain_algorithm(data,
