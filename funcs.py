@@ -314,7 +314,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                            stage_zscore,
                                                                                            stage_biomarker_index,
                                                                                            N_startpoints,
-                                                                                           likelihood_flag)
+                                                                                           likelihood_flag, 
+                                                                                           num_cores)
                 # Use the two subtype model combined with the other subtypes to
                 # inititialise the fitting of the next SuStaIn model in the
                 # hierarchy
@@ -1116,7 +1117,8 @@ def find_ml_mixture2linearzscoremodels(data,
                                        stage_zscore,
                                        stage_biomarker_index,
                                        N_startpoints,
-                                       likelihood_flag):
+                                       likelihood_flag, 
+                                       num_cores):
     '''
     Fit a mixture of two linear z-score models
     
