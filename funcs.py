@@ -1,4 +1,4 @@
-###
+is###
 # pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41468-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 # Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
