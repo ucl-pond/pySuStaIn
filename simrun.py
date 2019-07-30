@@ -4,6 +4,7 @@
 # Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 ###
 import numpy as np
+import multiprocessing
 from matplotlib import pyplot as plt
 from simfuncs import generate_random_sustain_model, generate_data_sustain
 from funcs import run_sustain_algorithm, cross_validate_sustain_model
@@ -17,6 +18,7 @@ def main():
     # cross-validation
     validate = False
     
+    num_cores = multiprocessing.cpu_count()
     N = 10  # number of biomarkers
     M = 100 # number of observations ( e.g. subjects )
     N_S_gt = 3 # number of ground truth subtypes
@@ -59,8 +61,8 @@ def main():
     N_startpoints = 25
     # maximum number of subtypes 
     N_S_max = 3
-    N_iterations_MCMC = int(1e6)
-    N_iterations_MCMC_opt = int(1e4)
+    N_iterations_MCMC = int(1e4)
+    N_iterations_MCMC_opt = int(1e3)
     
     likelihood_flag = 'Approx'
     output_folder = 'test'
@@ -78,7 +80,8 @@ def main():
                                                         likelihood_flag,
                                                         output_folder,
                                                         dataset_name,
-                                                        N_iterations_MCMC_opt)
+                                                        N_iterations_MCMC_opt, 
+                                                        num_cores)
 
     if validate:
         ### USER DEFINED INPUT: START
@@ -111,7 +114,6 @@ def main():
             test_idxs = test_idxs[select_fold]
         Nfolds = len(test_idxs)
 
-        num_cores = cpu_count()
         pool = Pool(num_cores)
         copier = functools.partial(cross_validate_sustain_model,
                                    data=data,

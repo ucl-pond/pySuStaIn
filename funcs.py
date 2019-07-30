@@ -14,21 +14,33 @@ from pathlib import Path
 import multiprocessing
 from functools import partial
 
-num_cores = multiprocessing.cpu_count()
 
-def prepare_data(data, pat_hc_index):
+def prepare_data(pat_data, hc_data):
     '''
     prepares the data by normalising tha patient data, checking signs, and missing data
     for further modelling
     inputs:
     =======
-    data: an MxN Numpy array that corresponds to M observations for N biomarkers
-    pat_hc_index: an Nx1 Numpy array that has 1 for patients and 0 for controls
+    pat_data: an MxN Numpy array that corresponds to M observations for N biomarkers for patients
+    hc_data: an LxN Numpy array from healhty population that has L observations for N biomarkers
+    
     Outputs:
     =======
-    '''
+    z_score_array: an MxN numpy array of the Z-scores
 
-    return None
+    '''
+    z_score_array = np.zeros( pat_data.shape )
+    if ((np.nunsum( pat_data ) > 0 ) or (np.nunsum(hc_data) > 0 )):
+        raise Exception("Patient or healthy control data have NaNs. Please remove or impute." )
+    #calculate z-score
+    for column_number, (sample_mean, sample_std) in enumerate( zip( np.mean( hc_data, axis = 0),
+                                                                    np.std( hc_data, axis = 0 ))):
+        z_score_array[ :, column_number - 1 ] = ( pat_data[:,column_number - 1] - sample_mean)/ sample_std
+        #WIP: check signs needs testing
+        if sample_mean > np.mean( pat_data[:, column_number - 1] ):
+            print('WARNING: flipping sign for column number '  + str( column_number - 1 ))
+            z_score_array[ :, column_number - 1 ] =  -1 * z_score_array[ :, column_number - 1 ]
+    return z_score_array
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
@@ -42,7 +54,8 @@ def run_sustain_algorithm(data,
                           likelihood_flag,
                           output_folder,
                           dataset_name,
-                          n_mcmc_opt_its):
+                          n_mcmc_opt_its,
+                          num_cores):
     '''
     Runs the sustain algorithm
     Inputs:
@@ -53,12 +66,13 @@ def run_sustain_algorithm(data,
     std_biomarker_zscore:
     stage_zscore:
     stage_biomarker_index:
-    N_startpoints:
+    N_startpoints: number of starting points, currently 25 is default
     N_S_max: maximum number of subtypes
     N_iterations_MCMC: number of iterations (default: 1e6)
-    likelihood_flag:
-    output_folder:
-    dataset_name:
+    likelihood_flag: Approximate or exact likelihood 
+    output_folder: folder to dump results
+    dataset_name: name that will be used in outputs
+    num_cores: number of cpu cores 
     Outputs
     =======
     '''
@@ -75,8 +89,6 @@ def run_sustain_algorithm(data,
         #        if pickle_filepath.exists():
         if False:
             print("Found pickle file: " + pickle_filename_s + ". Using pickled variables for " + str(s) + " subtype.")
-
-
             pickle_file = open(pickle_filename_s, 'rb')
 
             save_variables = pickle.load(pickle_file)
@@ -107,7 +119,8 @@ def run_sustain_algorithm(data,
                 ml_sequence_prev_EM,
                 ml_f_prev_EM,
                 N_startpoints,
-                likelihood_flag)
+                likelihood_flag,
+                num_cores)
             seq_init = ml_sequence_EM
             f_init = ml_f_EM
             ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = estimate_uncertainty_sustain_model(
@@ -185,7 +198,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                               ml_sequence_prev,
                                               ml_f_prev,
                                               N_startpoints,
-                                              likelihood_flag):
+                                              likelihood_flag, 
+                                              num_cores):
     '''
     Given the previous SuStaIn model, estimate the next model in the
     hierarchy (i.e. number of subtypes goes from N to N+1)
@@ -232,7 +246,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
     likelihood_flag: whether to use an exact method of inference - when set
     to 'Exact', the exact method is used, the approximate method is used for
     all other settings
-    
+   
+    num_cores: number of cores to use in multiprocessing to parallelise
     Outputs:
     =======
 
@@ -260,7 +275,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                                               stage_zscore,
                                                                                                               stage_biomarker_index,
                                                                                                               N_startpoints,
-                                                                                                              likelihood_flag)
+                                                                                                              likelihood_flag, 
+                                                                                                              num_cores  )
         print('Overall ML likelihood is',ml_likelihood)
     else:
         # If the number of subtypes is greater than 1, go through each subtype
@@ -300,7 +316,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                            stage_zscore,
                                                                                            stage_biomarker_index,
                                                                                            N_startpoints,
-                                                                                           likelihood_flag)
+                                                                                           likelihood_flag, 
+                                                                                           num_cores)
                 # Use the two subtype model combined with the other subtypes to
                 # inititialise the fitting of the next SuStaIn model in the
                 # hierarchy
@@ -318,7 +335,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                                                                                                  this_seq_init,
                                                                                                                                                                  this_f_init,
                                                                                                                                                                  N_startpoints,
-                                                                                                                                                                 likelihood_flag)
+                                                                                                                                                                 likelihood_flag,
+                                                                                                                                                                 num_cores)
                 # Choose the most probable SuStaIn model from the different
                 # possible SuStaIn models initialised by splitting each subtype
                 # in turn
@@ -344,7 +362,9 @@ def find_ml_linearzscoremodel(data,
                               stage_zscore,
                               stage_biomarker_index,
                               N_startpoints,
-                              likelihood_flag):
+                              likelihood_flag,
+                              num_cores
+                              ):
     ''' 
     Fit a linear z-score model
     
@@ -1110,7 +1130,8 @@ def find_ml_mixture2linearzscoremodels(data,
                                        stage_zscore,
                                        stage_biomarker_index,
                                        N_startpoints,
-                                       likelihood_flag):
+                                       likelihood_flag, 
+                                       num_cores):
     '''
     Fit a mixture of two linear z-score models
     
@@ -1217,7 +1238,8 @@ def find_ml_mixturelinearzscoremodels(data,
                                       seq_init,
                                       f_init,
                                       N_startpoints,
-                                      likelihood_flag):
+                                      likelihood_flag,
+                                      num_cores):
     '''
      Fit a mixture of linear z-score models
     
@@ -1647,7 +1669,7 @@ def plot_sustain_model(samples_sequence,
                        subtype,
                        samples_likelihood,
                        cval=False):
-    colour_mat = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]])
+    colour_mat = np.array([[0,0,1],[1,0,1],[1,0,0]])
     temp_mean_f = np.mean(samples_f, 1)
     vals = np.sort(temp_mean_f)[::-1]
     vals = np.array([np.round(x * 100.) for x in vals]) / 100.
@@ -1738,8 +1760,8 @@ def cross_validate_sustain_model(fold,
                                  output_folder,
                                  dataset_name,
                                  select_fold,
-                                 target,
-                                 n_mcmc_opt_its):
+                                 target
+                                 ):
     '''
     # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
     # and MCMC) on a training dataset and evaluating the model likelihood on a test
@@ -1769,7 +1791,8 @@ def cross_validate_sustain_model(fold,
                                                                                                                                                 ml_sequence_prev_EM,
                                                                                                                                                 ml_f_prev_EM,
                                                                                                                                                 N_startpoints,
-                                                                                                                                                likelihood_flag)
+                                                                                                                                                likelihood_flag, 
+                                                                                                                                                num_cores)
         with open(output_folder+'/'+dataset_name+'_EM_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
             print("\n"+ "Writing results to disk" + "\n")
             writer = csv.writer(f)
@@ -1778,6 +1801,7 @@ def cross_validate_sustain_model(fold,
             writer.writerows(ml_sequence_mat_EM)
             writer.writerow([ml_f_mat_EM])
             writer.writerow([ml_likelihood_mat_EM])
+            writer.writerow([ml_f_EM])
         seq_init = ml_sequence_EM
         f_init = ml_f_EM
         #MCMC
