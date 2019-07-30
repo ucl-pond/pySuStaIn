@@ -73,7 +73,7 @@ def main():
     shape_cov = np.cov(np.transpose( data ) ).shape
     covar = np.random.rand( shape_cov[0], shape_cov[1] )
     #make sure it is positive semi-definite
-    covar = numpy.dot(covar,covar.transpose())
+    covar = np.dot(covar,covar.transpose())
 
     samples_sequence, samples_f = run_sustain_algorithm(data,
                                                         min_biomarker_zscore,
