@@ -805,7 +805,7 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     p_perm_k = np.zeros((M, N + 1))
 
     # optimised likelihood calc - take log and only call np.exp once after loop
-    if covar:
+    if covar not False:
         # FIXME: this should be calculated from control data
         sigmat = np.tile( covar, (M, 1, 1))
     else:
