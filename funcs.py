@@ -439,7 +439,7 @@ def find_ml_linearzscoremodel(data,
                      current_sequence=seq_mat,
                      current_f=[1],
                      likelihood_flag=likelihood_flag,
-                     covar)
+                     covar=covar)
     # will return shape (N_startpoints, 6)
     par_mat = np.array(pool.map(copier, range(N_startpoints)))
     # distribute to local matrices
@@ -799,10 +799,9 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     p_perm_k = np.zeros((M, N + 1))
 
     # optimised likelihood calc - take log and only call np.exp once after loop
-    # FIXME: put this flag outside, or do an automated check
     if covar:
         # FIXME: this should be calculated from control data
-        sigmat = np.tile(np.outer(std_biomarker_zscore, std_biomarker_zscore), (M, 1, 1))
+        sigmat = np.tile( covar, (M, 1, 1))
     else:
         sigmat = np.tile(std_biomarker_zscore, (M, 1))    
         factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
