@@ -67,7 +67,8 @@ def main():
     likelihood_flag = 'Approx'
     output_folder = 'test'
     dataset_name = 'test'
-    
+    #covariance matrix must come from an independent healthy control population 
+    covar = np.transpose(np.cov(data)) 
     samples_sequence, samples_f = run_sustain_algorithm(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,
