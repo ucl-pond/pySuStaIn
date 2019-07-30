@@ -1659,7 +1659,7 @@ def plot_sustain_model(samples_sequence,
                        subtype,
                        samples_likelihood,
                        cval=False):
-    colour_mat = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]])
+    colour_mat = np.array([[0,0,1],[1,0,1],[1,0,0]])
     temp_mean_f = np.mean(samples_f, 1)
     vals = np.sort(temp_mean_f)[::-1]
     vals = np.array([np.round(x * 100.) for x in vals]) / 100.
