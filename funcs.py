@@ -575,7 +575,8 @@ def perform_em_mixturelinearzscoremodels(dummy,
                                                                                     stage_biomarker_index,
                                                                                     current_sequence,
                                                                                     current_f,
-                                                                                    likelihood_flag)
+                                                                                    likelihood_flag,
+                                                                                    covar)
     terminate = 0
     iteration = 0
     convergence_threshold = 1e-6
@@ -629,7 +630,8 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
                                                    stage_biomarker_index,
                                                    S,
                                                    f,
-                                                   likelihood_flag):
+                                                   likelihood_flag,
+                                                   covar):
     '''
      Computes the likelihood of a mixture of linear Z-score models using either
      an approximate method (faster, default setting) or an exact method
