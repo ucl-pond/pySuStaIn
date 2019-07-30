@@ -783,8 +783,10 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     p_perm_k = np.zeros((M, N + 1))
 
     # optimised likelihood calc - take log and only call np.exp once after loop
-    covar=True
+    # FIXME: put this flag outside, or do an automated check
+    covar=False
     if covar:
+        # FIXME: this should be calculated from control data
         sigmat = np.tile(np.outer(std_biomarker_zscore, std_biomarker_zscore), (M, 1, 1))
     else:
         sigmat = np.tile(std_biomarker_zscore, (M, 1))    
