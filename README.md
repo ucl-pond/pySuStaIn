@@ -1,7 +1,7 @@
 pySuStaIn
 ============
 
-[![Build Status](https://travis-ci.org/ucl-pond/pySuStaIn.svg?branch=master)](https://travis-ci.org/ucl-pond/pySuStaIn)
+[![Build Status](https://travis-ci.org/ucl-pond/pySuStaIn.svg?branch=dev)](https://travis-ci.org/ucl-pond/pySuStaIn)
 
 Subtyping and Staging Inference (SuStaIn) algorithm implementation in Python. SuStaIn is a model-based and data-driven machine learning method to 
 discover subtypes of patients who share similar patterns of progression and stage them across the trajectory of a given disease.
