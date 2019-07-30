@@ -55,7 +55,8 @@ def run_sustain_algorithm(data,
                           output_folder,
                           dataset_name,
                           n_mcmc_opt_its,
-                          num_cores):
+                          num_cores,
+                          covar = False):
     '''
     Runs the sustain algorithm
     Inputs:
@@ -73,8 +74,11 @@ def run_sustain_algorithm(data,
     output_folder: folder to dump results
     dataset_name: name that will be used in outputs
     num_cores: number of cpu cores 
+    covar: covariance matrix between variables from healthy control data
+    
     Outputs
     =======
+
     '''
 
     ml_sequence_prev_EM = []
@@ -120,7 +124,8 @@ def run_sustain_algorithm(data,
                 ml_f_prev_EM,
                 N_startpoints,
                 likelihood_flag,
-                num_cores)
+                num_cores,
+                covar)
             seq_init = ml_sequence_EM
             f_init = ml_f_EM
             ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = estimate_uncertainty_sustain_model(
@@ -199,7 +204,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                               ml_f_prev,
                                               N_startpoints,
                                               likelihood_flag, 
-                                              num_cores):
+                                              num_cores,
+                                              covar):
     '''
     Given the previous SuStaIn model, estimate the next model in the
     hierarchy (i.e. number of subtypes goes from N to N+1)
@@ -317,7 +323,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                            stage_biomarker_index,
                                                                                            N_startpoints,
                                                                                            likelihood_flag, 
-                                                                                           num_cores)
+                                                                                           num_cores,
+                                                                                           covar)
                 # Use the two subtype model combined with the other subtypes to
                 # inititialise the fitting of the next SuStaIn model in the
                 # hierarchy
@@ -431,7 +438,8 @@ def find_ml_linearzscoremodel(data,
                      stage_biomarker_index=stage_biomarker_index,
                      current_sequence=seq_mat,
                      current_f=[1],
-                     likelihood_flag=likelihood_flag)
+                     likelihood_flag=likelihood_flag,
+                     covar)
     # will return shape (N_startpoints, 6)
     par_mat = np.array(pool.map(copier, range(N_startpoints)))
     # distribute to local matrices
@@ -515,7 +523,8 @@ def perform_em_mixturelinearzscoremodels(dummy,
                                          stage_biomarker_index,
                                          current_sequence,
                                          current_f,
-                                         likelihood_flag):
+                                         likelihood_flag,
+                                         covar=False):
     '''
     Performs an E-M procedure to estimate parameters of the SuStaIn model.
     
@@ -536,6 +545,8 @@ def perform_em_mixturelinearzscoremodels(dummy,
     samples_f:
 
     samples_likelihood:
+
+    covar: covariance matrix
 
     ''' 
 
@@ -585,7 +596,8 @@ def perform_em_mixturelinearzscoremodels(dummy,
                                                                                                              stage_biomarker_index,
                                                                                                              current_sequence,
                                                                                                              current_f,
-                                                                                                             likelihood_flag)
+                                                                                                             likelihood_flag,
+                                                                                                             covar)
         HAS_converged = np.fabs((candidate_likelihood-current_likelihood)/max(candidate_likelihood,current_likelihood)) < convergence_threshold
         if HAS_converged:
             print('EM converged in', iteration + 1, 'iterations')
@@ -692,7 +704,8 @@ def calculate_likelihood_mixturelinearzscoremodels(data,
                                                                                   std_biomarker_zscore,
                                                                                   stage_zscore,
                                                                                   stage_biomarker_index,
-                                                                                  S[s])
+                                                                                  S[s],
+                                                                                  covar)
         else:
             # FIXME: test this function
             p_perm_k[:,:,s] = calculate_likelihood_stage_linearzscoremodel(data,
@@ -715,7 +728,9 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
                                                         std_biomarker_zscore,
                                                         stage_zscore,
                                                         stage_biomarker_index,
-                                                        S):
+                                                        S,
+                                                        covar=False
+                                                        ):
     '''
      Computes the likelihood of a single linear z-score model using an
      approximation method (faster)
@@ -744,7 +759,8 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
        dim: 1 x number of z-score stages
      S - the current ordering of the z-score stages for a particular subtype
        dim: 1 x number of z-score stages
-    
+     covar: covariance matrix calculated from the healthy control data
+
     Outputs:
     ========
 
@@ -784,7 +800,6 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
 
     # optimised likelihood calc - take log and only call np.exp once after loop
     # FIXME: put this flag outside, or do an automated check
-    covar=False
     if covar:
         # FIXME: this should be calculated from control data
         sigmat = np.tile(np.outer(std_biomarker_zscore, std_biomarker_zscore), (M, 1, 1))
@@ -924,7 +939,8 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                                                   stage_biomarker_index,
                                                   S_init,
                                                   f_init,
-                                                  likelihood_flag):
+                                                  likelihood_flag,
+                                                  covar = False):
     '''
     Optimises the parameters of the SuStaIn model
     
@@ -948,6 +964,8 @@ def optimise_parameters_mixturelinearzscoremodels(data,
     f_init:
 
     likelihood_flag:
+
+    covar: covariance matrix
 
     Outputs
     =======
@@ -983,7 +1001,8 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                                                                                   std_biomarker_zscore,
                                                                                   stage_zscore,
                                                                                   stage_biomarker_index,
-                                                                                  S_opt[s])
+                                                                                  S_opt[s], 
+                                                                                  covar )
         else:
             p_perm_k[:, :, s] = calculate_likelihood_stage_linearzscoremodel(data,
                                                                              min_biomarker_zscore,
@@ -1050,7 +1069,8 @@ def optimise_parameters_mixturelinearzscoremodels(data,
                                                                                                        std_biomarker_zscore,
                                                                                                        stage_zscore,
                                                                                                        stage_biomarker_index,
-                                                                                                       new_sequence)
+                                                                                                       new_sequence,
+                                                                                                       covar)
                 else:
                     possible_p_perm_k[:, :, index] = calculate_likelihood_stage_linearzscoremodel(data,
                                                                                                   min_biomarker_zscore,
@@ -1093,7 +1113,8 @@ def split_clusters(thread,
                    stage_zscore,
                    stage_biomarker_index,
                    likelihood_flag,
-                   N_S):
+                   N_S,
+                   covar = False):
     # ensure randomness across parallel processes by seeding numpy with process id
     current = multiprocessing.current_process()
     np.random.seed()
@@ -1122,7 +1143,8 @@ def split_clusters(thread,
                                                                              stage_biomarker_index,
                                                                              temp_seq_init,
                                                                              [1],
-                                                                             likelihood_flag)
+                                                                             likelihood_flag,
+                                                                             covar)
     return seq_init
 
 def find_ml_mixture2linearzscoremodels(data,
@@ -1133,7 +1155,8 @@ def find_ml_mixture2linearzscoremodels(data,
                                        stage_biomarker_index,
                                        N_startpoints,
                                        likelihood_flag, 
-                                       num_cores):
+                                       num_cores,
+                                       covar ):
     '''
     Fit a mixture of two linear z-score models
     
@@ -1202,7 +1225,8 @@ def find_ml_mixture2linearzscoremodels(data,
                      stage_zscore=stage_zscore,
                      stage_biomarker_index=stage_biomarker_index,
                      likelihood_flag=likelihood_flag,
-                     N_S=N_S)
+                     N_S=N_S,
+                     covar = covar )
     # will return shape (N_startpoints, 1)
     seq_mat = np.array(pool.map(copier, range(N_startpoints)))
     # now optimise
@@ -1215,7 +1239,8 @@ def find_ml_mixture2linearzscoremodels(data,
                      stage_biomarker_index=stage_biomarker_index,
                      current_sequence=seq_mat,
                      current_f=np.array([1.] * N_S) / float(N_S),
-                     likelihood_flag=likelihood_flag)
+                     likelihood_flag=likelihood_flag,
+                     covar)
     # will return shape (N_startpoints, 6)
     par_mat = np.array(pool.map(copier, range(N_startpoints)))
     # distribute to local matrices
@@ -1330,7 +1355,8 @@ def find_ml_mixturelinearzscoremodels(data,
                      stage_biomarker_index=stage_biomarker_index,
                      current_sequence=seq_mat,
                      current_f=f_mat,
-                     likelihood_flag=likelihood_flag)
+                     likelihood_flag=likelihood_flag,
+                     covar)
     # will return shape (N_startpoints, 6)
     par_mat = np.array(pool.map(copier, range(N_startpoints)))
     # distribute to local matrices
