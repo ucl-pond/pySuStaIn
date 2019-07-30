@@ -817,7 +817,7 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     N_biomarkers = stage_value.shape[0]
     for j in range(N + 1):
         stage_value_tiled_j = stage_value_tiled[:, j].reshape(M, N_biomarkers)
-        if covar:
+        if isinstance(covar,np.ndarray): #if covariance matrix is provided
             temp = []
             for i in range(stage_value_tiled_j.shape[0]):
                 temp.append(1./(N+1.)*multivariate_normal.pdf(data[i,:],stage_value_tiled_j[i,:],sigmat[i]))
