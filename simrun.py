@@ -73,8 +73,8 @@ def main():
     shape_cov = np.cov(np.transpose( data ) ).shape
     covar = np.random.rand( shape_cov[0], shape_cov[1] )
     #make sure it is positive semi-definite
-    covar = np.linalg.cholesky( np.dot(covar,covar.transpose()))
-    covar=False
+    covar = np.dot(covar,covar.transpose())
+    #covar=False
     samples_sequence, samples_f = run_sustain_algorithm(data,
                                                         min_biomarker_zscore,
                                                         max_biomarker_zscore,
@@ -103,7 +103,7 @@ def main():
         
         if not test_idxs:
             print(
-                '!!!CAUTION!!! No user input for cross-validation fold selection - using automated stratification. Only do this if you know what you are doing!')
+                '!!!CAUTION!!! No user input for cross-validation fold selection - using automated stratification.')
             N_folds = 10
             if target:
                 cv = StratifiedKFold(n_splits=N_folds, shuffle=True)
@@ -146,4 +146,4 @@ def main():
 
 if __name__ == '__main__':
     np.random.seed(42)
-    kkkkkkmain()
+    main()

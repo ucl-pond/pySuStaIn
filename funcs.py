@@ -291,7 +291,7 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
     else:
         # If the number of subtypes is greater than 1, go through each subtype
         # in turn and try splitting into two subtypes
-        _, _, _, p_sequence, _ = calculate_likelihood_mixturelinearzscoremodels(data,
+        _, _, _, p_sequence, _ = calculate_likelihood_mixturelinearzscoremodels( data,
                                                                                 min_biomarker_zscore,
                                                                                 max_biomarker_zscore,
                                                                                 std_biomarker_zscore,
@@ -300,7 +300,7 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                 ml_sequence_prev,
                                                                                 ml_f_prev,
                                                                                 likelihood_flag,
-                                                                                covar)
+                                                                                covar )
         ml_sequence_prev = ml_sequence_prev.reshape(ml_sequence_prev.shape[0], ml_sequence_prev.shape[1])
         p_sequence = p_sequence.reshape(p_sequence.shape[0], N_S - 1)
         p_sequence_norm = p_sequence / np.tile(np.sum(p_sequence, 1).reshape(len(p_sequence), 1), (N_S - 1))
@@ -348,7 +348,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                                                                                                  this_f_init,
                                                                                                                                                                  N_startpoints,
                                                                                                                                                                  likelihood_flag,
-                                                                                                                                                                 num_cores)
+                                                                                                                                                                 num_cores,
+                                                                                                                                                                 covar)
                 # Choose the most probable SuStaIn model from the different
                 # possible SuStaIn models initialised by splitting each subtype
                 # in turn
@@ -809,9 +810,9 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
     p_perm_k = np.zeros((M, N + 1))
 
     # optimised likelihood calc - take log and only call np.exp once after loop
-    if isinstance(covar,np.ndarray):#if covariance matrix is set (not False) 
-        # FIXME: this should be calculated from control data
-        sigmat = np.tile( covar, (M, 1, 1))
+    if isinstance(covar,np.ndarray):#if covariance matrix is set
+        #sigmat = np.tile( covar, (M, 1, 1))
+        sigmat = covar
     else:
         sigmat = np.tile(std_biomarker_zscore, (M, 1))    
         factor = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
@@ -824,7 +825,8 @@ def calculate_likelihood_stage_linearzscoremodel_approx(data,
         if isinstance(covar,np.ndarray): #if covariance matrix is provided
             temp = []
             for i in range(stage_value_tiled_j.shape[0]):
-                temp.append(1./(N+1.)*multivariate_normal.pdf(data[i,:],stage_value_tiled_j[i,:],sigmat[i]))
+                #temp.append(1./(N+1.)*multivariate_normal.pdf(data[i,:],stage_value_tiled_j[i,:],sigmat[i]))
+                temp.append(1./(N+1.)*multivariate_normal.pdf(data[i,:],stage_value_tiled_j[i,:],sigmat))
             p_perm_k[:, j] = temp
         else:
             x = (data - stage_value_tiled_j) / sigmat
