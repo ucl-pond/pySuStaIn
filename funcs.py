@@ -139,7 +139,8 @@ def run_sustain_algorithm(data,
                 f_init,
                 N_iterations_MCMC,
                 likelihood_flag,
-                n_mcmc_opt_its)
+                n_mcmc_opt_its,
+                covar)
             ml_sequence_prev_EM = ml_sequence_EM
             ml_f_prev_EM = ml_f_EM
 
@@ -296,7 +297,8 @@ def estimate_ml_sustain_model_nplus1_clusters(data,
                                                                                 stage_biomarker_index,
                                                                                 ml_sequence_prev,
                                                                                 ml_f_prev,
-                                                                                likelihood_flag)
+                                                                                likelihood_flag,
+                                                                                covar)
         ml_sequence_prev = ml_sequence_prev.reshape(ml_sequence_prev.shape[0], ml_sequence_prev.shape[1])
         p_sequence = p_sequence.reshape(p_sequence.shape[0], N_S - 1)
         p_sequence_norm = p_sequence / np.tile(np.sum(p_sequence, 1).reshape(len(p_sequence), 1), (N_S - 1))
@@ -1387,7 +1389,8 @@ def estimate_uncertainty_sustain_model(data,
                                        f_init,
                                        N_iterations_MCMC,
                                        likelihood_flag,
-                                       n_mcmc_opt_its):
+                                       n_mcmc_opt_its,
+                                       covar):
     '''
      Estimate the uncertainty in the subtype progression patterns and
      proportion of individuals belonging to the SuStaIn model
@@ -1466,7 +1469,8 @@ def estimate_uncertainty_sustain_model(data,
                                                                                  seq_init,
                                                                                  f_init,
                                                                                  likelihood_flag,
-                                                                                 n_mcmc_opt_its)
+                                                                                 n_mcmc_opt_its,
+                                                                                 covar)
     # Run the full MCMC algorithm to estimate the uncertainty
     ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood = perform_mcmc_mixturelinearzscoremodels(data,
                                                                                                                                min_biomarker_zscore,
@@ -1479,7 +1483,8 @@ def estimate_uncertainty_sustain_model(data,
                                                                                                                                N_iterations_MCMC,
                                                                                                                                seq_sigma_opt,
                                                                                                                                f_sigma_opt,
-                                                                                                                               likelihood_flag)
+                                                                                                                               likelihood_flag,
+                                                                                                                               covar)
     
     return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
@@ -1492,7 +1497,8 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                      seq_init,
                                                      f_init,
                                                      likelihood_flag,
-                                                     n_iterations_MCMC_optimisation):
+                                                     n_iterations_MCMC_optimisation,
+                                                     covar):
     # Optimise the perturbation size for the MCMC algorithm
     #    n_iterations_MCMC_optimisation = int(1e4)  # FIXME: set externally
 
@@ -1515,7 +1521,8 @@ def optimise_mcmc_settings_mixturelinearzscoremodels(data,
                                                                                                                  n_iterations_MCMC_optimisation,
                                                                                                                  seq_sigma_currentpass,
                                                                                                                  f_sigma_currentpass,
-                                                                                                                 likelihood_flag)
+                                                                                                                 likelihood_flag,
+                                                                                                                 covar)
         samples_position_currentpass = np.zeros(samples_sequence_currentpass.shape)
         for s in range(N_S):
             for sample in range(n_iterations_MCMC_optimisation):
@@ -1545,7 +1552,8 @@ def perform_mcmc_mixturelinearzscoremodels(data,
                                            n_iterations,
                                            seq_sigma,
                                            f_sigma,
-                                           likelihood_flag):
+                                           likelihood_flag,
+                                           covar):
     '''
     Inputs:
     ========
@@ -1676,7 +1684,8 @@ def perform_mcmc_mixturelinearzscoremodels(data,
                                                                                        stage_biomarker_index,
                                                                                        S,
                                                                                        f,
-                                                                                       likelihood_flag)
+                                                                                       likelihood_flag,
+                                                                                       covar)
         samples_likelihood[i] = likelihood_sample
         if i > 0:
             ratio = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
@@ -1793,7 +1802,8 @@ def cross_validate_sustain_model(fold,
                                  output_folder,
                                  dataset_name,
                                  select_fold,
-                                 target
+                                 target,
+                                 covar
                                  ):
     '''
     # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
@@ -1825,7 +1835,8 @@ def cross_validate_sustain_model(fold,
                                                                                                                                                 ml_f_prev_EM,
                                                                                                                                                 N_startpoints,
                                                                                                                                                 likelihood_flag, 
-                                                                                                                                                num_cores)
+                                                                                                                                                num_cores,
+                                                                                                                                                covar)
         with open(output_folder+'/'+dataset_name+'_EM_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
             print("\n"+ "Writing results to disk" + "\n")
             writer = csv.writer(f)
@@ -1848,7 +1859,8 @@ def cross_validate_sustain_model(fold,
                                                                                                                           f_init,
                                                                                                                           N_iterations_MCMC,
                                                                                                                           likelihood_flag,
-                                                                                                                          n_mcmc_opt_its)
+                                                                                                                          n_mcmc_opt_its,
+                                                                                                                          covar)
         with open(output_folder+'/'+dataset_name+'_MCMC_'+str(s)+'_Seq_Fold'+str(fold)+'.csv', 'w') as f:
             writer = csv.writer(f)
             writer.writerows(ml_sequence)
@@ -1866,7 +1878,8 @@ def cross_validate_sustain_model(fold,
                                                                                                   std_biomarker_zscore,
                                                                                                   stage_zscore,
                                                                                                   stage_biomarker_index,
-                                                                                                  likelihood_flag)
+                                                                                                  likelihood_flag,
+                                                                                                  covar)
         with open(output_folder + '/' + dataset_name + '_OutOfSampleLikelihood_' + str(s) + '_Seq_Fold' + str(fold) + '.csv', 'w') as f:
             writer = csv.writer(f)
             writer.writerows(samples_likelihood_subj_test)
@@ -1886,7 +1899,8 @@ def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
                                                                std_biomarker_zscore,
                                                                stage_zscore,
                                                                stage_biomarker_index,
-                                                               likelihood_flag):
+                                                               likelihood_flag,
+                                                               covar):
     '''
 
     Function to 
@@ -1909,7 +1923,8 @@ def evaluate_likelihood_setofsamples_mixturelinearzscoremodels(data,
                                                                                         stage_biomarker_index,
                                                                                         S,
                                                                                         f,
-                                                                                        likelihood_flag)
+                                                                                        likelihood_flag,
+                                                                                        covar)
         samples_likelihood_subj[:,i] = likelihood_sample_subj
         
     return samples_likelihood_subj
@@ -1927,7 +1942,8 @@ def subtype_and_stage_individuals_selectsubtypethenstage(data,
                                                          N_samples,
                                                          N_c,
                                                          output_folder,
-                                                         dataset_name):
+                                                         dataset_name,
+                                                         covar):
     M = data.shape[0]
     n_iterations_MCMC = samples_sequence.shape[2]
     select_samples = np.round(np.linspace(0, n_iterations_MCMC - 1, N_samples))
@@ -1954,7 +1970,8 @@ def subtype_and_stage_individuals_selectsubtypethenstage(data,
             stage_biomarker_index,
             this_S,
             this_f,
-            likelihood_flag)
+            likelihood_flag,
+            covar)
         total_prob_subtype = total_prob_subtype.reshape(len(total_prob_subtype), N_S)
         total_prob_subtype_norm = total_prob_subtype / np.tile(
             np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1), (1, N_S))
