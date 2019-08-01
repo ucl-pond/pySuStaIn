@@ -40,7 +40,9 @@ def prepare_data(pat_data, hc_data):
         if sample_mean > np.mean( pat_data[:, column_number - 1] ):
             print('WARNING: flipping sign for column number '  + str( column_number - 1 ))
             z_score_array[ :, column_number - 1 ] =  -1 * z_score_array[ :, column_number - 1 ]
-    return z_score_array
+        #WIP: add covariance calculation
+        covariance_matrix = np.cov( np.transpose( z_score_array ))
+    return z_score_array, covariance_matrix
 
 def run_sustain_algorithm(data,
                           min_biomarker_zscore,
