@@ -1,7 +1,7 @@
-pySuStaIn
+LOOpySuStaIn: Leon's Object Oriented pySuStaIn
 ============
 
-SuStaIn algorithm in Python.
+SuStaIn algorithm in Python, with a combination of mixture (i.e. EBM style) and z-score SuStaIn implementations.
 
 SuStaIn papers
 ============
@@ -13,6 +13,7 @@ Dependencies
 - [NumPy](https://github.com/numpy/numpy)
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
+- [Scikit-learn](https://scikit-learn.org)
 
 Parallelisation
 ===============
