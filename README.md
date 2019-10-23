@@ -22,7 +22,7 @@ Parallelisation
 
 Running different SuStaIn implementations
 ===============
-In simrun.py sustainType can be set :
+In simrun.py sustainType can be set to:
   - "mixture_GMM" : mixture model style SuStaIn with Gaussian mixture modelling of normal/abnormal.
   - "mixture_KDE":  mixture model style SuStaIn with Kernel Density Estimation (KDE) mixture modelling of normal/abnormal.
   - "zscore":       z-score style SuStaIn with three events for each biomarker (1,2,3 std. devs. from normality)
