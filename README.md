@@ -14,7 +14,7 @@ Dependencies
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
 - [Scikit-learn](https://scikit-learn.org) for cross-validation
-- [kde_ebm](https://github.com/ucl-pond/kde_ebm) for mixture modelling (KDE and GMM included)
+- [kde_ebm](https://github.com/noxtoby/kde_ebm_open) for mixture modelling (KDE and GMM included)
 
 Parallelisation
 ===============
