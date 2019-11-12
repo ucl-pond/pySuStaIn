@@ -316,7 +316,7 @@ class MixtureSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, subtype, samples_likelihood, n_samples, cval=False):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None):
 
         temp_mean_f                         = np.mean(samples_f, 1)
         vals                                = np.sort(temp_mean_f)[::-1]
@@ -337,8 +337,8 @@ class MixtureSustain(AbstractSustain):
         else:
             fig, ax                         = plt.subplots()
 
-        #plot_order                          = range(N_stages) #samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
-        plot_order                          = samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
+        if plot_order is None:
+            plot_order                      = samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
         biomarker_labels_plot_order         = [self.biomarker_labels[i].replace('_', ' ') for i in plot_order]
 
         for i in range(N_S):
@@ -395,6 +395,20 @@ class MixtureSustain(AbstractSustain):
 
         return fig, ax
 
+    def subtype_and_stage_individuals_newData(self, L_yes_new, L_no_new, samples_sequence, samples_f, N_samples):
+
+        numStages_new                   = L_yes_new.shape[1]    #number of stages == number of biomarkers here
+
+        assert numStages_new == self.__sustainData.getNumStages(), "Number of stages in new data should be same as in training data"
+
+        sustainData_newData             = MixtureSustainData(L_yes_new, L_no_new, numStages_new)
+
+        ml_subtype,         \
+        prob_ml_subtype,    \
+        ml_stage,           \
+        prob_ml_stage                   = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
 
     # ********************* STATIC METHODS
     @staticmethod

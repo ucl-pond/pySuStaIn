@@ -22,11 +22,12 @@ import sklearn
 
 def main():
     # cross-validation
-    validate                = False
-    
-    N                       = 5  # number of biomarkers
-    M                       = 500 # number of observations ( e.g. subjects )
-    N_S_gt                  = 3 # number of ground truth subtypes
+    validate                = True
+    N_folds                 = 10
+
+    N                       = 5         # number of biomarkers
+    M                       = 500       # number of observations ( e.g. subjects )
+    N_S_gt                  = 3         # number of ground truth subtypes
 
     # number of starting points
     N_startpoints           = 25
@@ -35,7 +36,7 @@ def main():
     N_iterations_MCMC       = int(1e5)  #int(1e6)
 
     #either 'mixture_GMM' or 'mixture_KDE' or 'zscore'
-    sustainType             = 'mixture_GMM'
+    sustainType             = 'mixture_KDE'
 
     assert sustainType in ("mixture_GMM", "mixture_KDE", "zscore"), "sustainType should be either mixture_GMM, mixture_KDE or zscore"
 
@@ -102,7 +103,7 @@ def main():
         elif sustainType == "mixture_KDE":
             mixtures        = fit_all_kde_models(data, labels)
 
-        fig, ax             = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels)
+        fig, ax, _          = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels)
         fig.show()
         # fig.savefig(os.path.join(outDir, 'kde_fits.png'))
 
@@ -124,17 +125,8 @@ def main():
 
     samples_sequence, samples_f, _,_,_,_ = sustain.run_sustain_algorithm()
 
-
     if validate:
-
-        ### USER DEFINED INPUT: START
-        # test_idxs: indices corresponding to 'data' for test set, with shape (N_folds, data.shape[0]/N_folds)
-        # select_fold: index of a single fold from 'test_idxs'. For use if this code was to be run on multiple processors
-        # target: stratification is done based on the labels provided here. For use with sklearn method 'StratifiedKFold'
         test_idxs           = []
-        select_fold         = []
-
-        N_folds             = 5
 
         cv                  = sklearn.model_selection.StratifiedKFold(n_splits=N_folds, shuffle=True)
         cv_it               = cv.split(data, labels)
@@ -143,7 +135,11 @@ def main():
             test_idxs.append(test)
         test_idxs           = np.array(test_idxs)
 
-        sustain.cross_validate_sustain_model(test_idxs)
+        CVIC_matrix         = sustain.cross_validate_sustain_model(test_idxs)
+
+        #this part estimates cross-validated positional variance diagrams
+        for i in range(N_S_max):
+            sustain.combine_cross_validated_sequences(i+1, N_folds)
 
 
     plt.show()

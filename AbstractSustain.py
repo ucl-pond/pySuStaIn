@@ -10,6 +10,7 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import scipy.stats as stats
 from matplotlib import pyplot as plt
 from pathlib import Path
 import pickle
@@ -151,7 +152,7 @@ class AbstractSustain(ABC):
             n_samples                       = self.__sustainData.getNumSamples() #self.__data.shape[0]
 
             # plot results
-            fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, s, samples_likelihood, n_samples)
+            fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples)
             fig.savefig(self.output_folder + '/' + self.dataset_name + '_subtype' + str(s) + '_PVD.png')
             fig.show()
 
@@ -181,6 +182,8 @@ class AbstractSustain(ABC):
             test_idxs                       = test_idxs[select_fold]
         Nfolds                              = len(test_idxs)
 
+        CVIC_matrix                         = np.zeros((Nfolds, self.N_S_max))
+
         for fold in range(Nfolds):
 
 
@@ -202,6 +205,8 @@ class AbstractSustain(ABC):
 
                 if pickle_filepath.exists():
 
+                    print("Loading " + pickle_filename_fold_s)
+
                     pickle_file             = open(pickle_filename_fold_s, 'rb')
 
                     loaded_variables        = pickle.load(pickle_file)
@@ -216,7 +221,6 @@ class AbstractSustain(ABC):
                     samples_f               = loaded_variables["samples_f"]
 
                     samples_likelihood_subj_test = loaded_variables["samples_likelihood_subj_test"]
-
                     pickle_file.close()
 
                 else:
@@ -226,7 +230,6 @@ class AbstractSustain(ABC):
                     ml_sequence_mat_EM,     \
                     ml_f_mat_EM,            \
                     ml_likelihood_mat_EM    = self._estimate_ml_sustain_model_nplus1_clusters(sustainData_train, ml_sequence_prev_EM, ml_f_prev_EM)
-
 
                     seq_init                    = ml_sequence_EM
                     f_init                      = ml_f_EM
@@ -255,7 +258,6 @@ class AbstractSustain(ABC):
                     save_variables["ml_f_EM"]                           = ml_f_EM
                     save_variables["ml_f_prev_EM"]                      = ml_f_prev_EM
 
-                    save_variables                                      = {}
                     save_variables["samples_sequence"]                  = samples_sequence
                     save_variables["samples_f"]                         = samples_f
                     save_variables["samples_likelihood"]                = samples_likelihood
@@ -266,25 +268,105 @@ class AbstractSustain(ABC):
                     pickle_output               = pickle.dump(save_variables, pickle_file)
                     pickle_file.close()
 
-        """
-        ###
-        # UNDER CONSTRUCTION
-        ###
-        samples_sequence_cval = np.array(samples_sequence_cval)
-        samples_f_cval = np.array(samples_f_cval)
-        biomarker_labels = np.array([str(x) for x in range(data.shape[1])])
-        fig, ax = plot_sustain_model(samples_sequence_cval,
-                                     samples_f_cval,
-                                     biomarker_labels,
-                                     stage_zscore,
-                                     stage_biomarker_index,
-                                     N_S_max,
-                                     output_folder,
-                                     dataset_name,
-                                     s,
-                                     samples_likelihood,
-                                     cval=True)
-        """
+                #sum across subjects, average across MCMC samples
+                CVIC_matrix[fold, s]            = np.mean(sum(-2*np.log(samples_likelihood_subj_test)))
+
+        print("CVIC across subtype models: " + str(np.mean(CVIC_matrix, 0)))
+
+        return CVIC_matrix
+
+    # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
+    # so that you get more realistic estimates of variance within event positions within subtypes
+    def combine_cross_validated_sequences(self, N_subtypes, N_folds):
+
+
+        #*********** load ML sequence for full model for N_subtypes
+        pickle_filename_s                   = self.output_folder + '/' + self.dataset_name + '_subtype' + str(N_subtypes-1) + '.pickle'
+        pickle_filepath                     = Path(pickle_filename_s)
+
+        assert pickle_filepath.exists(), "Failed to find pickle file for full model with " + str(N_subtypes) + " subtypes."
+
+        pickle_file                         = open(pickle_filename_s, 'rb')
+
+        loaded_variables_full               = pickle.load(pickle_file)
+
+        ml_sequence_EM_full                 = loaded_variables_full["ml_sequence_EM"]
+        ml_f_EM_full                        = loaded_variables_full["ml_f_EM"]
+
+        #re-index so that subtypes are in descending order by fraction of subjects
+        index_EM_sort                       = np.argsort(ml_f_EM_full)[::-1]
+        ml_sequence_EM_full                 = ml_sequence_EM_full[index_EM_sort,:]
+        ml_f_EM_full                        = ml_f_EM_full[index_EM_sort]
+
+        for i in range(N_folds):
+
+            #load the MCMC sequences for this fold's model of N_subtypes
+            pickle_filename_fold_s          = self.output_folder + '/' + self.dataset_name + '_fold' + str(i) + '_subtype' + str(N_subtypes-1) + '.pickle'
+            pickle_filepath                 = Path(pickle_filename_fold_s)
+
+            assert pickle_filepath.exists(), "Failed to find pickle file for fold " + str(i)
+
+            pickle_file                     = open(pickle_filename_fold_s, 'rb')
+
+            loaded_variables_i              = pickle.load(pickle_file)
+
+            ml_sequence_EM_i                = loaded_variables_i["ml_sequence_EM"]
+            ml_f_EM_i                       = loaded_variables_i["ml_f_EM"]
+
+            samples_sequence_i              = loaded_variables_i["samples_sequence"]
+            samples_f_i                     = loaded_variables_i["samples_f"]
+
+            samples_likelihood_subj_test    = loaded_variables_i["samples_likelihood_subj_test"]
+
+            pickle_file.close()
+
+            # Really simple approach: choose order based on this fold's fraction of subjects per subtype
+            # It doesn't work very well when the fractions of subjects are similar across subtypes
+            #mean_f_i                        = np.mean(samples_f_i, 1)
+            #iMax_vec                        = np.argsort(mean_f_i)[::-1]
+            #iMax_vec                        = iMax_vec.astype(int)
+
+            #This approach seems to work better:
+            # 1. calculate the Kendall's tau correlation matrix,
+            # 2. Flatten the matrix into a vector
+            # 3. Sort the vector, then unravel the flattened indices back into matrix style (x, y) indices
+            # 4. Find the order in which this fold's subtypes first appear in the sorted list
+            corr_mat                        = np.zeros((N_subtypes, N_subtypes))
+            for j in range(N_subtypes):
+               for k in range(N_subtypes):
+                   corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
+            set_full                        = []
+            set_fold_i                      = []
+            i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
+            for k in range(len(i_i)):
+                if not i_i[k] in set_full and not i_j[k] in set_fold_i:
+                    set_full.append(i_i[k].astype(int))
+                    set_fold_i.append(i_j[k].astype(int))
+            index_set_full                  = np.argsort(set_full).astype(int) #np.argsort(set_full)[::-1].astype(int)
+            iMax_vec                        = [set_fold_i[i] for i in index_set_full]
+
+            assert(np.all(np.sort(iMax_vec)==np.arange(N_subtypes)))
+
+            if i == 0:
+                samples_sequence_cval       = samples_sequence_i[iMax_vec,:,:]
+                samples_f_cval              = samples_f_i[iMax_vec, :]
+            else:
+                samples_sequence_cval       = np.concatenate((samples_sequence_cval,    samples_sequence_i[iMax_vec,:,:]),  axis=2)
+                samples_f_cval              = np.concatenate((samples_f_cval,           samples_f_i[iMax_vec,:]),           axis=1)
+
+        n_samples                           = self.__sustainData.getNumSamples()
+        plot_order                          = ml_sequence_EM_full[0,:].astype(int)
+        fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True, plot_order=plot_order)
+
+        # save and show this figure after all subtypes have been calculcated
+        png_filename                        = self.output_folder + '/' + self.dataset_name + 'subtype' + str(N_subtypes - 1) + '_PVD_' + str(N_folds) + 'fold_CV.png'
+
+        #ax.legend(loc='upper right')
+        fig.savefig(png_filename, bbox_inches='tight')
+        fig.show()
+
+        #return samples_sequence_cval, samples_f_cval, kendalls_tau_mat, f_mat #samples_sequence_cval
+
 
     def subtype_and_stage_individuals(self, sustainData, samples_sequence, samples_f, N_samples):
 
@@ -315,8 +397,10 @@ class AbstractSustain(ABC):
 
             total_prob_subtype              = total_prob_subtype.reshape(len(total_prob_subtype), N_S)
             total_prob_subtype_norm         = total_prob_subtype        / np.tile(np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
-            total_prob_stage_norm           = total_prob_stage          / np.tile(np.sum(total_prob_stage, 1).reshape(len(total_prob_subtype), 1),          (1, nStages + 1))
-            total_prob_subtype_stage_norm   = total_prob_subtype_stage  / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1), 1).reshape(nSamples, 1, 1),   (1, nStages + 1, N_S))
+            total_prob_stage_norm           = total_prob_stage          / np.tile(np.sum(total_prob_stage, 1).reshape(len(total_prob_stage), 1),          (1, nStages + 1)) #removed total_prob_subtype
+
+            #total_prob_subtype_stage_norm   = total_prob_subtype_stage  / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1), 1).reshape(nSamples, 1, 1),   (1, nStages + 1, N_S))
+            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1, keepdims=True), 2).reshape(nSamples, 1, 1),(1, nStages + 1, N_S))
 
             prob_subtype_stage              = (i / (i + 1.) * prob_subtype_stage)   + (1. / (i + 1.) * total_prob_subtype_stage_norm)
             prob_subtype                    = (i / (i + 1.) * prob_subtype)         + (1. / (i + 1.) * total_prob_subtype_norm)
@@ -837,7 +921,11 @@ class AbstractSustain(ABC):
         pass
 
     @abstractmethod
-    def _plot_sustain_model(self, samples_sequence, samples_f, subtype, samples_likelihood, n_samples, cval=False):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None):
+        pass
+
+    @abstractmethod
+    def subtype_and_stage_individuals_newData(self):    #up to the implementations to define exact number of params here
         pass
 
     # ********************* STATIC METHODS

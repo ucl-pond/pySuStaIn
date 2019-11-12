@@ -472,7 +472,7 @@ class ZscoreSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, subtype, samples_likelihood, n_samples, cval=False):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None):
 
         colour_mat                          = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]]) #, [0.5, 0, 1], [0, 1, 1]])
 
@@ -556,6 +556,19 @@ class ZscoreSustain(AbstractSustain):
 
         return fig, ax
 
+
+    def subtype_and_stage_individuals_newData(self, data_new, numStages_new, samples_sequence, samples_f, N_samples):
+
+        assert numStages_new == self.__sustainData.getNumSamples(), "Number of stages in new data should be same as in training data"
+
+        sustainData_newData             = ZScoreSustainData(data_new, numStages_new)
+
+        ml_subtype,         \
+        prob_ml_subtype,    \
+        ml_stage,           \
+        prob_ml_stage                   = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
 
     # ********************* STATIC METHODS
     @staticmethod
