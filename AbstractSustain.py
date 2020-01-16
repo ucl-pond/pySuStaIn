@@ -16,6 +16,11 @@ from pathlib import Path
 import pickle
 import csv
 import os
+import multiprocessing
+from functools import partial, partialmethod
+
+import time
+import pathos
 
 #*******************************************
 #The data structure class for AbstractSustain. It has no data itself - the implementations of AbstractSustain need to define their own implementations of this class.
@@ -44,14 +49,23 @@ class AbstractSustainData(ABC):
 #*******************************************
 class AbstractSustain(ABC):
 
-
     def __init__(self,
                  sustainData,
                  N_startpoints,
                  N_S_max,
                  N_iterations_MCMC,
                  output_folder,
-                 dataset_name):
+                 dataset_name,
+                 use_parallel_startpoints):
+        # The initializer for the abstract class
+        # Parameters:
+        #   sustainData                 - an instance of an AbstractSustainData implementation
+        #   N_startpoints               - number of startpoints to use in maximum likelihood step of SuStaIn, typically 25
+        #   N_S_max                     - maximum number of subtypes, should be 1 or more
+        #   N_iterations_MCMC           - number of MCMC iterations, typically 1e5 or 1e6 but can be lower for debugging
+        #   output_folder               - where to save pickle files, etc.
+        #   dataset_name                - for naming pickle files
+        #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
 
         assert(isinstance(sustainData, AbstractSustainData))
 
@@ -61,15 +75,31 @@ class AbstractSustain(ABC):
         self.N_S_max                    = N_S_max
         self.N_iterations_MCMC          = N_iterations_MCMC
 
+        self.num_cores                  = multiprocessing.cpu_count()
+
         self.output_folder              = output_folder
         self.dataset_name               = dataset_name
 
+        self.use_parallel_startpoints   = use_parallel_startpoints
+
+        if self.use_parallel_startpoints:
+
+            np_version                  = float(np.__version__.split('.')[0] + '.' + np.__version__.split('.')[1])
+            assert (np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly.")
+
+            self.pool                   = pathos.multiprocessing.ProcessingPool() #pathos.multiprocessing.ParallelPool()
+            self.pool.ncpus             = multiprocessing.cpu_count()
+        else:
+            self.pool                   = pathos.serial.SerialPool()
+
     #********************* PUBLIC METHODS
     def run_sustain_algorithm(self):
+        # Externally called method to start the SuStaIn algorithm after initializing the SuStaIn class object properly
 
         ml_sequence_prev_EM                 = []
         ml_f_prev_EM                        = []
 
+        np.random.seed()
 
         fig0, ax0                           = plt.subplots()
         for s in range(self.N_S_max):
@@ -167,13 +197,13 @@ class AbstractSustain(ABC):
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
 
     def cross_validate_sustain_model(self, test_idxs, select_fold = []):
-
         # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
         # and MCMC) on a training dataset and evaluating the model likelihood on a test
-        # dataset. 'data_fold' should specify the membership of each data point to a
-        # test fold. Use a specific index of variable 'select_fold' to just run for a
-        # single fold (allows the cross-validation to be run in parallel), or leave
-        # the variable 'select_fold' empty to iterate across folds sequentially.
+        # dataset.
+        # Parameters:
+        #   'test_idxs'     - list of test set indices for each fold
+        #   'select_fold'   - allows user to just run for a single fold (allows the cross-validation to be run in parallel).
+        #                     leave this variable empty to iterate across folds sequentially.
 
         if not os.path.exists(self.output_folder):
             os.makedirs(self.output_folder)
@@ -195,8 +225,7 @@ class AbstractSustain(ABC):
 
             ml_sequence_prev_EM             = []
             ml_f_prev_EM                    = []
-            #samples_sequence_cval           = []
-            #samples_f_cval                  = []
+
             for s in range(self.N_S_max):
 
 
@@ -246,9 +275,6 @@ class AbstractSustain(ABC):
                     ml_sequence_prev_EM         = ml_sequence_EM
                     ml_f_prev_EM                = ml_f_EM
 
-                    #samples_sequence_cval       += list(samples_sequence)
-                    #samples_f_cval              += list(samples_f)
-
                     if not os.path.exists(self.output_folder):
                         os.makedirs(self.output_folder)
 
@@ -268,17 +294,42 @@ class AbstractSustain(ABC):
                     pickle_output               = pickle.dump(save_variables, pickle_file)
                     pickle_file.close()
 
+
+                if s == self.N_S_max-1:
+                    if fold == 0:
+                        samples_sequence_cval   = samples_sequence
+                        samples_f_cval          = samples_f
+                    else:
+                        samples_sequence_cval   = np.concatenate((samples_sequence_cval,    samples_sequence), axis=2)
+                        samples_f_cval          = np.concatenate((samples_f_cval,           samples_f), axis=1)
+
                 #sum across subjects, average across MCMC samples
                 CVIC_matrix[fold, s]            = np.mean(sum(-2*np.log(samples_likelihood_subj_test)))
 
         print("CVIC across subtype models: " + str(np.mean(CVIC_matrix, 0)))
 
-        return CVIC_matrix
+        import pandas as pd
+        import pylab
+        df_CVIC                                 = pd.DataFrame(data = CVIC_matrix, columns = ["s_" + str(i) for i in range(self.N_S_max)])
+        df_CVIC.boxplot(grid=False)
+        for i in range(self.N_S_max):
+            y                                   = df_CVIC[["s_" + str(i)]]
+            x                                   = np.random.normal(1+i, 0.04, size=len(y)) # Add some random "jitter" to the x-axis
+            pylab.plot(x, y, 'r.', alpha=0.2)
 
-    # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
-    # so that you get more realistic estimates of variance within event positions within subtypes
+        # max like subtype and stage / subject
+        N_samples                       = 1000
+        ml_subtype,             \
+        prob_ml_subtype,        \
+        ml_stage,               \
+        prob_ml_stage                   = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence_cval, samples_f_cval, N_samples)
+
+        return CVIC_matrix, samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+
+
     def combine_cross_validated_sequences(self, N_subtypes, N_folds):
-
+        # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
+        # so that you get more realistic estimates of variance within event positions within subtypes
 
         #*********** load ML sequence for full model for N_subtypes
         pickle_filename_s                   = self.output_folder + '/' + self.dataset_name + '_subtype' + str(N_subtypes-1) + '.pickle'
@@ -365,10 +416,11 @@ class AbstractSustain(ABC):
         fig.savefig(png_filename, bbox_inches='tight')
         fig.show()
 
+
         #return samples_sequence_cval, samples_f_cval, kendalls_tau_mat, f_mat #samples_sequence_cval
 
-
     def subtype_and_stage_individuals(self, sustainData, samples_sequence, samples_f, N_samples):
+        # Subtype and stage a set of subjects. Useful for subtyping/staging subjects that were not used to build the model
 
         nSamples                            = sustainData.getNumSamples()  #data_local.shape[0]
         nStages                             = sustainData.getNumStages()    #self.stage_zscore.shape[1]
@@ -444,13 +496,9 @@ class AbstractSustain(ABC):
         #
         #
         # OUTPUTS:
-        # ml_sequence - the ordering of the stages for each subtype for the next
-        # SuStaIn model in the hierarchy
-        # ml_f - the most probable proportion of individuals belonging to each
-        # subtype for the next SuStaIn model in the hierarchy
-        # ml_likelihood - the likelihood of the most probable SuStaIn model for the
-        # next SuStaIn model in the hierarchy
-        # previous outputs _mat - same as before but for each start point
+        # ml_sequence       - the ordering of the stages for each subtype for the next SuStaIn model in the hierarchy
+        # ml_f              - the most probable proportion of individuals belonging to each subtype for the next SuStaIn model in the hierarchy
+        # ml_likelihood     - the likelihood of the most probable SuStaIn model for the next SuStaIn model in the hierarchy
 
         N_S = len(ml_sequence_prev) + 1
         if N_S == 1:
@@ -491,7 +539,6 @@ class AbstractSustain(ABC):
                     # Take the data from the individuals belonging to a particular
                     # cluster and fit a two subtype model
                     print('Splitting cluster', ix_cluster_split + 1, 'of', N_S - 1)
-                    #data_split              = data_local[(ml_cluster_subj == int(ix_cluster_split + 1)).reshape(len(data_local), )]
                     ix_i                    = (ml_cluster_subj == int(ix_cluster_split + 1)).reshape(sustainData.getNumSamples(), )
                     sustainData_i           = sustainData.reindex(ix_i)
 
@@ -534,43 +581,30 @@ class AbstractSustain(ABC):
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
+    #********************************************
+
     def _find_ml(self, sustainData):
-        # Fit a linear z-score model
+        # Fit the maximum likelihood model
         #
         # OUTPUTS:
-        # ml_sequence - the ordering of the stages for each subtype
-        # ml_f - the most probable proportion of individuals belonging to each
-        # subtype
+        # ml_sequence   - the ordering of the stages for each subtype
+        # ml_f          - the most probable proportion of individuals belonging to each subtype
         # ml_likelihood - the likelihood of the most probable SuStaIn model
-        # previous outputs _mat - same as before but for each start point
 
-        terminate                           = 0
-        startpoint                          = 0
+        partial_iter                        = partial(self._find_ml_iteration, sustainData)
+        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
+
+        if ~isinstance(pool_output_list, list):
+            pool_output_list                = list(pool_output_list)
 
         ml_sequence_mat                     = np.zeros((1, sustainData.getNumStages(), self.N_startpoints)) #np.zeros((1, self.stage_zscore.shape[1], self.N_startpoints))
         ml_f_mat                            = np.zeros((1, self.N_startpoints))
         ml_likelihood_mat                   = np.zeros(self.N_startpoints)
 
-        while terminate == 0:
-            print(' ++ startpoint', startpoint)
-            # randomly initialise the sequence of the linear z-score model
-            seq_init                        = self._initialise_sequence(sustainData)  #self.__initialise_sequence_linearzscoremodel()
-            f_init                          = [1]
-
-            this_ml_sequence,   \
-            this_ml_f,          \
-            this_ml_likelihood, \
-            _,                  \
-            _,                  \
-            _                               = self._perform_em(sustainData, seq_init, f_init)    #self.__perform_em_mixturelinearzscoremodels(data_local, seq_init, f_init)
-
-            ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-            ml_f_mat[:, startpoint]         = this_ml_f
-            ml_likelihood_mat[startpoint]   = this_ml_likelihood
-
-            if startpoint == (self.N_startpoints - 1):
-                terminate                   = 1
-            startpoint                      += 1
+        for i in range(self.N_startpoints):
+            ml_sequence_mat[:, :, i]        = pool_output_list[i][0]
+            ml_f_mat[:, i]                  = pool_output_list[i][1]
+            ml_likelihood_mat[i]            = pool_output_list[i][2]
 
         ix                                  = np.argmax(ml_likelihood_mat)
         ml_sequence                         = ml_sequence_mat[:, :, ix]
@@ -579,144 +613,124 @@ class AbstractSustain(ABC):
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-    def _find_ml_mixture2(self, sustainData):
+    def _find_ml_iteration(self, sustainData, seed_num):
+        #Convenience sub-function for above
 
-        # Fit a mixture of two linear z-score models
+        if self.use_parallel_startpoints:
+            np.random.seed()
+
+        # randomly initialise the sequence of the linear z-score model
+        seq_init                        = self._initialise_sequence(sustainData)
+        f_init                          = [1]
+
+        this_ml_sequence,   \
+        this_ml_f,          \
+        this_ml_likelihood, \
+        _,                  \
+        _,                  \
+        _                               = self._perform_em(sustainData, seq_init, f_init)
+
+        return this_ml_sequence, this_ml_f, this_ml_likelihood
+
+    #********************************************
+
+    def _find_ml_mixture2(self, sustainData):
+        # Fit a mixture of two models
         #
         #
         # OUTPUTS:
-        # ml_sequence - the ordering of the stages for each subtype
-        # ml_f - the most probable proportion of individuals belonging to each
-        # subtype
+        # ml_sequence   - the ordering of the stages for each subtype
+        # ml_f          - the most probable proportion of individuals belonging to each subtype
         # ml_likelihood - the likelihood of the most probable SuStaIn model
-        # previous outputs _mat - same as before but for each start point
+
         N_S                                 = 2
 
-        terminate                           = 0
-        startpoint                          = 0
+        partial_iter                        = partial(self._find_ml_mixture2_iteration, sustainData)
+        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
 
-        ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))   #np.zeros((N_S, self.stage_zscore.shape[1], self.N_startpoints))
-        ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
-        ml_likelihood_mat                   = np.zeros((self.N_startpoints, 1))
-
-        while terminate == 0:
-            print(' ++ startpoint', startpoint)
-
-            # randomly initialise individuals as belonging to one of the two subtypes (clusters)
-            min_N_cluster                   = 0
-            while min_N_cluster == 0:
-                #cluster_assignment          = np.array([np.ceil(x) for x in N_S * np.random.rand(data_local.shape[0])]).astype(int)
-                cluster_assignment          = np.array([np.ceil(x) for x in N_S * np.random.rand(sustainData.getNumSamples())]).astype(int)
-
-                temp_N_cluster              = np.zeros(N_S)
-                for s in range(1, N_S + 1):
-                    temp_N_cluster          = np.sum((cluster_assignment == s).astype(int), 0)  # FIXME? this means the last index always defines the sum...
-                min_N_cluster               = min([temp_N_cluster])
-
-            # initialise the stages of the two linear z-score models by fitting a
-            # single linear z-score model to each of the two sets of individuals
-            seq_init                        = np.zeros((N_S, sustainData.getNumStages()))
-            for s in range(N_S):
-
-                #temp_data                   = data_local[cluster_assignment.reshape(cluster_assignment.shape[0], ) == (s + 1), :]
-                index_s                     = cluster_assignment.reshape(cluster_assignment.shape[0], ) == (s + 1)
-                temp_sustainData            = sustainData.reindex(index_s)
-
-                temp_seq_init               = self._initialise_sequence(sustainData)
-                seq_init[s, :], _, _, _, _, _ = self._perform_em(temp_sustainData, temp_seq_init, [1])
-
-            f_init                          = np.array([1.] * N_S) / float(N_S)
-
-            # optimise the mixture of two linear z-score models from the
-            # initialisation
-            this_ml_sequence,   \
-            this_ml_f,          \
-            this_ml_likelihood, _, _, _     = self._perform_em(sustainData, seq_init, f_init)
-
-            ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-            ml_f_mat[:, startpoint]         = this_ml_f
-            ml_likelihood_mat[startpoint]   = this_ml_likelihood
-
-            if startpoint == (self.N_startpoints - 1):
-                terminate                   = 1
-
-            startpoint                      += 1
-
-        ix                                  = [np.where(ml_likelihood_mat == max(ml_likelihood_mat))[0][0]] #ugly bit of code to get first index where likelihood is maximum
-
-        #if len(ix) > 1: # == self.N_startpoints:       #if len(ix) > 0:
-        #    print("WARNING: perform_em_mixturelinearzscoremodels() within find_ml_mixture2linearzscoremodels() found same likelihood for all startpoints. Taking first one as best. Beware!")
-        #    ix                              = [0]
-        #else:
-        #    ix                              = ix[0]
-
-        ml_sequence                         = ml_sequence_mat[:, :, ix] #.squeeze()
-        ml_f                                = ml_f_mat[:, ix]           #.squeeze()
-        ml_likelihood                       = ml_likelihood_mat[ix]     #.squeeze()
-
-        return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
-
-    def _find_ml_mixture(self, sustainData, seq_init, f_init):
-        # Fit a mixture of linear z-score models
-        #
-        # INPUTS:
-        # data - !important! needs to be (positive) z-scores!
-        #   dim: number of subjects x number of biomarkers
-        # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-        # for all markers)
-        #   dim: 1 x number of biomarkers
-        # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-        # the final stage of the linear z-score model
-        #   dim: 1 x number of biomarkers
-        # std_biomarker_zscore - the standard devation of each biomarker z-score
-        # (should be 1 for all markers)
-        #   dim: 1 x number of biomarkers
-        # stage_zscore and stage_biomarker_index give the different z-score stages
-        # for the linear z-score model, i.e. the index of the different z-scores
-        # for each biomarker
-        # stage_zscore - the different z-scores of the model
-        #   dim: 1 x number of z-score stages
-        # stage_biomarker_index - the index of the biomarker that the corresponding
-        # entry of stage_zscore is referring to - !important! ensure biomarkers are
-        # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-        # data
-        #   dim: 1 x number of z-score stages
-        # seq_init - intial ordering of the stages for each subtype
-        # f_init - initial proprtion of individuals belonging to each subtype
-        # N_startpoints - the number of start points for the fitting
-        # likelihood_flag - whether to use an exact method of inference - when set
-        # to 'Exact', the exact method is used, the approximate method is used for
-        # all other settings
-        #
-        # OUTPUTS:
-        # ml_sequence - the ordering of the stages for each subtype for the next
-        # SuStaIn model in the hierarchy
-        # ml_f - the most probable proportion of individuals belonging to each
-        # subtype for the next SuStaIn model in the hierarchy
-        # ml_likelihood - the likelihood of the most probable SuStaIn model for the
-        # next SuStaIn model in the hierarchy
-        # previous outputs _mat - same as before but for each start point
-        N_S                                 = seq_init.shape[0]
-        terminate                           = 0
-        startpoint                          = 0
+        if ~isinstance(pool_output_list, list):
+            pool_output_list                = list(pool_output_list)
 
         ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))
         ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
         ml_likelihood_mat                   = np.zeros((self.N_startpoints, 1))
-        while terminate == 0:
-            print(' ++ startpoint', startpoint)
 
-            this_ml_sequence,       \
-            this_ml_f,              \
-            this_ml_likelihood, _, _, _     = self._perform_em(sustainData, seq_init, f_init)
+        for i in range(self.N_startpoints):
+            ml_sequence_mat[:, :, i]        = pool_output_list[i][0]
+            ml_f_mat[:, i]                  = pool_output_list[i][1]
+            ml_likelihood_mat[i]            = pool_output_list[i][2]
 
-            ml_sequence_mat[:, :, startpoint] = this_ml_sequence
-            ml_f_mat[:, startpoint]         = this_ml_f
-            ml_likelihood_mat[startpoint]   = this_ml_likelihood
+        ix                                  = [np.where(ml_likelihood_mat == max(ml_likelihood_mat))[0][0]] #ugly bit of code to get first index where likelihood is maximum
 
-            if startpoint == (self.N_startpoints - 1):
-                terminate                   = 1
-            startpoint                      = startpoint + 1
+        ml_sequence                         = ml_sequence_mat[:, :, ix]
+        ml_f                                = ml_f_mat[:, ix]
+        ml_likelihood                       = ml_likelihood_mat[ix]
+
+        return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
+
+    def _find_ml_mixture2_iteration(self, sustainData, seed_num):
+        #Convenience sub-function for above
+
+        if self.use_parallel_startpoints:
+            np.random.seed()
+
+        N_S                                 = 2
+
+        # randomly initialise individuals as belonging to one of the two subtypes (clusters)
+        min_N_cluster                       = 0
+        while min_N_cluster == 0:
+            cluster_assignment              = np.array([np.ceil(x) for x in N_S * np.random.rand(sustainData.getNumSamples())]).astype(int)
+
+            temp_N_cluster                  = np.zeros(N_S)
+            for s in range(1, N_S + 1):
+                temp_N_cluster              = np.sum((cluster_assignment == s).astype(int),
+                                        0)  # FIXME? this means the last index always defines the sum...
+            min_N_cluster                   = min([temp_N_cluster])
+
+        # initialise the stages of the two models by fitting a single model to each of the two sets of individuals
+        seq_init                            = np.zeros((N_S, sustainData.getNumStages()))
+        for s in range(N_S):
+            index_s                         = cluster_assignment.reshape(cluster_assignment.shape[0], ) == (s + 1)
+            temp_sustainData                = sustainData.reindex(index_s)
+
+            temp_seq_init                   = self._initialise_sequence(sustainData)
+            seq_init[s, :], _, _, _, _, _   = self._perform_em(temp_sustainData, temp_seq_init, [1])
+
+        f_init                              = np.array([1.] * N_S) / float(N_S)
+
+        # optimise the mixture of two models from the initialisation
+        this_ml_sequence, \
+        this_ml_f, \
+        this_ml_likelihood, _, _, _         = self._perform_em(sustainData, seq_init, f_init)
+
+        return this_ml_sequence, this_ml_f, this_ml_likelihood
+
+    #********************************************
+    def _find_ml_mixture(self, sustainData, seq_init, f_init):
+        # Fit a mixture of models
+        #
+        #
+        # OUTPUTS:
+        # ml_sequence   - the ordering of the stages for each subtype for the next SuStaIn model in the hierarchy
+        # ml_f          - the most probable proportion of individuals belonging to each subtype for the next SuStaIn model in the hierarchy
+        # ml_likelihood - the likelihood of the most probable SuStaIn model for the next SuStaIn model in the hierarchy
+
+        N_S                                 = seq_init.shape[0]
+
+        partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
+        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
+
+        if ~isinstance(pool_output_list, list):
+            pool_output_list                = list(pool_output_list)
+
+        ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))
+        ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
+        ml_likelihood_mat                   = np.zeros((self.N_startpoints, 1))
+
+        for i in range(self.N_startpoints):
+            ml_sequence_mat[:, :, i]        = pool_output_list[i][0]
+            ml_f_mat[:, i]                  = pool_output_list[i][1]
+            ml_likelihood_mat[i]            = pool_output_list[i][2]
 
         ix                                  = np.where(ml_likelihood_mat == max(ml_likelihood_mat))
         ix                                  = ix[0]
@@ -727,6 +741,21 @@ class AbstractSustain(ABC):
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
+    def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_num):
+        #Convenience sub-function for above
+
+        if self.use_parallel_startpoints:
+            np.random.seed()
+
+        ml_sequence,        \
+        ml_f,               \
+        ml_likelihood,      \
+        samples_sequence,   \
+        samples_f,          \
+        samples_likelihood                  = self._perform_em(sustainData, seq_init, f_init)
+
+        return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
+    #********************************************
 
     def _perform_em(self, sustainData, current_sequence, current_f):
 
@@ -777,20 +806,15 @@ class AbstractSustain(ABC):
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
     def _calculate_likelihood(self, sustainData, S, f):
-        # Computes the likelihood of a mixture of linear z-score models using either
-        # an approximate method (faster, default setting) or an exact method
+        # Computes the likelihood of a mixture of models
         #
         #
         # OUTPUTS:
-        # loglike - the log-likelihood of the current model
-        # total_prob_subj - the total probability of the current SuStaIn model for
-        # each subject
-        # total_prob_stage - the total probability of each stage in the current
-        # SuStaIn model
-        # total_prob_cluster - the total probability of each subtype in the current
-        # SuStaIn model
-        # p_perm_k - the probability of each subjects data at each stage of each
-        # subtype in the current SuStaIn model
+        # loglike               - the log-likelihood of the current model
+        # total_prob_subj       - the total probability of the current SuStaIn model for each subject
+        # total_prob_stage      - the total probability of each stage in the current SuStaIn model
+        # total_prob_cluster    - the total probability of each subtype in the current SuStaIn model
+        # p_perm_k              - the probability of each subjects data at each stage of each subtype in the current SuStaIn model
 
         M                                   = sustainData.getNumSamples()  #data_local.shape[0]
         N_S                                 = S.shape[0]
@@ -815,24 +839,17 @@ class AbstractSustain(ABC):
         return loglike, total_prob_subj, total_prob_stage, total_prob_cluster, p_perm_k
 
     def _estimate_uncertainty_sustain_model(self, sustainData, seq_init, f_init):
-
         # Estimate the uncertainty in the subtype progression patterns and
         # proportion of individuals belonging to the SuStaIn model
         #
         #
         # OUTPUTS:
-        # ml_sequence - the most probable ordering of the stages for each subtype
-        # found across MCMC samples
-        # ml_f - the most probable proportion of individuals belonging to each
-        # subtype found across MCMC samples
-        # ml_likelihood - the likelihood of the most probable SuStaIn model found
-        # across MCMC samples
-        # samples_sequence - samples of the ordering of the stages for each subtype
-        # obtained from MCMC sampling
-        # samples_f - samples of the proportion of individuals belonging to each
-        # subtype obtained from MCMC sampling
-        # samples_likeilhood - samples of the likelihood of each SuStaIn model
-        # sampled by the MCMC sampling
+        # ml_sequence       - the most probable ordering of the stages for each subtype found across MCMC samples
+        # ml_f              - the most probable proportion of individuals belonging to each subtype found across MCMC samples
+        # ml_likelihood     - the likelihood of the most probable SuStaIn model found across MCMC samples
+        # samples_sequence  - samples of the ordering of the stages for each subtype obtained from MCMC sampling
+        # samples_f         - samples of the proportion of individuals belonging to each subtype obtained from MCMC sampling
+        # samples_likeilhood - samples of the likelihood of each SuStaIn model sampled by the MCMC sampling
 
         # Perform a few initial passes where the perturbation sizes of the MCMC uncertainty estimation are tuned
         seq_sigma_opt, f_sigma_opt          = self._optimise_mcmc_settings(sustainData, seq_init, f_init)
@@ -887,7 +904,6 @@ class AbstractSustain(ABC):
         return seq_sigma_opt, f_sigma_opt
 
     def _evaluate_likelihood_setofsamples(self, sustainData, samples_sequence, samples_f):
-
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
         n_iterations                        = samples_sequence.shape[2]
@@ -905,7 +921,7 @@ class AbstractSustain(ABC):
 
     # ********************* ABSTRACT METHODS
     @abstractmethod
-    def _initialise_sequence(self):
+    def _initialise_sequence(self, sustainData):
         pass
 
     @abstractmethod

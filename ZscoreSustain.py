@@ -34,6 +34,8 @@ class ZScoreSustainData(AbstractSustainData):
         return ZScoreSustainData(self.data[index,], self.__numStages)
 
 #*******************************************
+#An implementation of the AbstractSustain class with multiple events for each biomarker based on deviations from normality, measured in z-scores.
+#There are a fixed number of thresholds for each biomarker, specified at initialization of the ZscoreSustain object.
 class ZscoreSustain(AbstractSustain):
 
     def __init__(self,
@@ -45,43 +47,30 @@ class ZscoreSustain(AbstractSustain):
                  N_S_max,
                  N_iterations_MCMC,
                  output_folder,
-                 dataset_name):
-
-        # INPUTS:
-        # data - !important! needs to be (positive) z-scores!
-        #   dim: number of subjects x number of biomarkers
-        # min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-        # for all markers)
-        #   dim: 1 x number of biomarkers
-        # max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-        # the final stage of the linear z-score model
-        #   dim: 1 x number of biomarkers
-        # std_biomarker_zscore - the standard devation of each biomarker z-score
-        # (should be 1 for all markers)
-        #   dim: 1 x number of biomarkers
-        # stage_zscore and stage_biomarker_index give the different z-score stages
-        # for the linear z-score model, i.e. the index of the different z-scores
-        # for each biomarker
-        # stage_zscore - the different z-scores of the model
-        #   dim: 1 x number of z-score stages
-        # stage_biomarker_index - the index of the biomarker that the corresponding
-        # entry of stage_zscore is referring to - !important! ensure biomarkers are
-        # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-        # data
-        #   dim: 1 x number of z-score stages
-        # ml_sequence_prev - the ordering of the stages for each subtype from the
-        # previous SuStaIn model
-        #   dim: number of subtypes x number of z-score stages
-        # ml_f_prev - the proportion of individuals belonging to each subtype from
-        # the previous SuStaIn model
-        #   dim: number of subtypes x 1
-        # N_startpoints - the number of start points for the fitting
+                 dataset_name,
+                 use_parallel_startpoints):
+        # The initializer for the z-score based events implementation of AbstractSustain
+        # Parameters:
+        #   data                        - !important! needs to be (positive) z-scores!
+        #                                 dim: number of subjects x number of biomarkers
+        #   Z_vals                      - a matrix specifying the z-score thresholds for each biomarker
+        #                                 for M biomarkers and 3 thresholds (1,2 and 3 for example) this would be a dim: M x 3 matrix
+        #   Z_max                       - a vector specifying the maximum z-score for each biomarker
+        #                                 when using z-score thresholds of 1,2,3 this would typically be 5.
+        #                                 for M biomarkers this would be a dim: M x 1 vector
+        #   biomarker_labels            - the names of the biomarkers as a list of strings
+        #   N_startpoints               - number of startpoints to use in maximum likelihood step of SuStaIn, typically 25
+        #   N_S_max                     - maximum number of subtypes, should be 1 or more
+        #   N_iterations_MCMC           - number of MCMC iterations, typically 1e5 or 1e6 but can be lower for debugging
+        #   output_folder               - where to save pickle files, etc.
+        #   dataset_name                - for naming pickle files
+        #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
 
         N                               = data.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
 
-
-        IX_vals                         = np.array([[x for x in range(N)]] * 3).T
+        num_zscores                     = Z_vals.shape[1]
+        IX_vals                         = np.array([[x for x in range(N)]] * num_zscores).T
 
         stage_zscore                    = np.array([y for x in Z_vals.T for y in x])
         stage_zscore                    = stage_zscore.reshape(1, len(stage_zscore))
@@ -105,24 +94,14 @@ class ZscoreSustain(AbstractSustain):
                          N_S_max,
                          N_iterations_MCMC,
                          output_folder,
-                         dataset_name)
+                         dataset_name,
+                         use_parallel_startpoints)
 
 
     def _initialise_sequence(self, sustainData):
         # Randomly initialises a linear z-score model ensuring that the biomarkers
         # are monotonically increasing
         #
-        # INPUTS:
-        # stage_zscore and stage_biomarker_index give the different z-score stages
-        # for the linear z-score model, i.e. the index of the different z-scores
-        # for each biomarker
-        # stage_zscore - the different z-scores of the model
-        #   dim: 1 x number of z-score stages
-        # stage_biomarker_index - the index of the biomarker that the corresponding
-        # entry of stage_zscore is referring to - !important! ensure biomarkers are
-        # indexed s.t. they correspond to columns 1 to number of biomarkers in your
-        # data
-        #   dim: 1 x number of z-score stages
         #
         # OUTPUTS:
         # S - a random linear z-score model under the condition that each biomarker
@@ -162,31 +141,6 @@ class ZscoreSustain(AbstractSustain):
         '''
          Computes the likelihood of a single linear z-score model using an
          approximation method (faster)
-        Inputs:
-        =======
-         data - !important! needs to be (positive) z-scores!
-           dim: number of subjects x number of biomarkers
-         min_biomarker_zscore - a minimum z-score for each biomarker (usually zero
-         for all markers)
-           dim: 1 x number of biomarkers
-         max_biomarker_zscore - a maximum z-score for each biomarker - reached at
-         the final stage of the linear z-score model
-           dim: 1 x number of biomarkers
-         std_biomarker_zscore - the standard devation of each biomarker z-score
-         (should be 1 for all markers)
-           dim: 1 x number of biomarkers
-         stage_zscore and stage_biomarker_index give the different z-score stages
-         for the linear z-score model, i.e. the index of the different z-scores
-         for each biomarker
-         stage_zscore - the different z-scores of the model
-           dim: 1 x number of z-score stages
-         stage_biomarker_index - the index of the biomarker that the corresponding
-         entry of stage_zscore is referring to - !important! ensure biomarkers are
-         indexed s.t. they correspond to columns 1 to number of biomarkers in your
-         data
-           dim: 1 x number of z-score stages
-         S - the current ordering of the z-score stages for a particular subtype
-           dim: 1 x number of z-score stages
         Outputs:
         ========
          p_perm_k - the probability of each subjects data at each stage of a particular subtype
@@ -259,8 +213,8 @@ class ZscoreSustain(AbstractSustain):
         return p_perm_k
 
     def _optimise_parameters(self, sustainData, S_init, f_init):
-
         # Optimise the parameters of the SuStaIn model
+
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
         N_S                                 = S_init.shape[0]
         N                                   = self.stage_zscore.shape[1]
@@ -272,17 +226,7 @@ class ZscoreSustain(AbstractSustain):
         p_perm_k                            = np.zeros((M, N + 1, N_S))
 
         for s in range(N_S):
-
-            #if likelihood_flag == 'Exact':
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
-            #else:
-            #    p_perm_k[:, :, s] = calculate_likelihood_stage_linearzscoremodel(data,
-            #                                                                     min_biomarker_zscore,
-            #                                                                     max_biomarker_zscore,
-            #                                                                     std_biomarker_zscore,
-            #                                                                     stage_zscore,
-            #                                                                     stage_biomarker_index,
-            #                                                                     S_opt[s])
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
         p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
@@ -332,21 +276,17 @@ class ZscoreSustain(AbstractSustain):
                 possible_p_perm_k           = np.zeros((M, N + 1, len(possible_positions)))
                 for index in range(len(possible_positions)):
                     current_sequence        = S_opt[s]
+
+                    #choose a position in the sequence to move an event to
                     move_event_to           = possible_positions[index]
+
+                    # move this event in its new position
                     current_sequence        = np.delete(current_sequence, move_event_from, 0)  # this is different to the Matlab version, which call current_sequence(move_event_from) = []
                     new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
                     possible_sequences[index, :] = new_sequence
 
-                    #if likelihood_flag == 'Exact':
                     possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
-                    #else:
-                    #    possible_p_perm_k[:, :, index] = calculate_likelihood_stage_linearzscoremodel(data,
-                    #                                                                                  min_biomarker_zscore,
-                    #                                                                                 max_biomarker_zscore,
-                    #                                                                                  std_biomarker_zscore,
-                    #                                                                                  stage_zscore,
-                    #                                                                                  stage_biomarker_index,
-                    #                                                                                  new_sequence)
+
                     p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
                     total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
                     total_prob_subj         = np.sum(total_prob_stage, 1)
@@ -361,11 +301,14 @@ class ZscoreSustain(AbstractSustain):
                 p_perm_k[:, :, s]           = this_p_perm_k[:, :, 0]
 
             S_opt[s]                        = this_S
+
         p_perm_k_weighted                   = p_perm_k * f_val_mat
         p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
+
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+
         f_opt                               = f_opt.reshape(N_S)
         total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
@@ -375,8 +318,8 @@ class ZscoreSustain(AbstractSustain):
         return S_opt, f_opt, likelihood_opt
 
     def _perform_mcmc(self, sustainData, seq_init, f_init, n_iterations, seq_sigma, f_sigma):
-
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
+
         N                                   = self.stage_zscore.shape[1]
         N_S                                 = seq_init.shape[0]
 
@@ -484,12 +427,26 @@ class ZscoreSustain(AbstractSustain):
         N_S                                 = samples_sequence.shape[0]
         N_bio                               = len(self.biomarker_labels)
 
-        if N_S > 1:
-            fig, ax                         = plt.subplots(1, N_S)
-        else:
+        if N_S == 1:
             fig, ax                         = plt.subplots()
+            total_axes                      = 1;
+        elif N_S < 3:
+            fig, ax                         = plt.subplots(1, N_S)
+            total_axes                      = N_S
+        elif N_S < 7:
+            fig, ax                         = plt.subplots(2, int(np.ceil(N_S / 2)))
+            total_axes                      = 2 * int(np.ceil(N_S / 2))
+        else:
+            fig, ax                         = plt.subplots(3, int(np.ceil(N_S / 3)))
+            total_axes                      = 3 * int(np.ceil(N_S / 3))
 
-        for i in range(N_S):
+
+        for i in range(total_axes):        #range(N_S):
+
+            if i not in range(N_S):
+                ax.flat[i].set_axis_off()
+                continue
+
             this_samples_sequence           = np.squeeze(samples_sequence[ix[i], :, :]).T
             markers                         = np.unique(self.stage_biomarker_index)
             N                               = this_samples_sequence.shape[1]
@@ -521,20 +478,21 @@ class ZscoreSustain(AbstractSustain):
 
             # must be a smarter way of doing this, but subplots(1,1) doesn't produce an array...
             if N_S > 1:
-                ax[i].imshow(confus_matrix_c, interpolation='nearest')      #, cmap=plt.cm.Blues)
-                ax[i].set_xticks(np.arange(N))
-                ax[i].set_xticklabels(range(1, N+1), rotation=45, fontsize=X_FONT_SIZE)
+                ax_i                        = ax.flat[i] #ax[i]
+                ax_i.imshow(confus_matrix_c, interpolation='nearest')      #, cmap=plt.cm.Blues)
+                ax_i.set_xticks(np.arange(N))
+                ax_i.set_xticklabels(range(1, N+1), rotation=45, fontsize=X_FONT_SIZE)
 
-                ax[i].set_yticks(np.arange(N_bio))
-                ax[i].set_yticklabels([]) #['']* N_bio)
+                ax_i.set_yticks(np.arange(N_bio))
+                ax_i.set_yticklabels([]) #['']* N_bio)
                 if i == 0:
-                    ax[i].set_yticklabels(np.array(self.biomarker_labels, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)
-                    for tick in ax[i].yaxis.get_major_ticks():
+                    ax_i.set_yticklabels(np.array(self.biomarker_labels, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)
+                    for tick in ax_i.yaxis.get_major_ticks():
                         tick.label.set_color('black')
 
                 #ax[i].set_ylabel('Biomarker name') #, fontsize=20)
-                ax[i].set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax[i].set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
+                ax_i.set_xlabel('Event position', fontsize=X_FONT_SIZE)
+                ax_i.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
 
             else: #**** first plot
                 ax.imshow(confus_matrix_c) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
@@ -557,8 +515,9 @@ class ZscoreSustain(AbstractSustain):
         return fig, ax
 
 
-    def subtype_and_stage_individuals_newData(self, data_new, numStages_new, samples_sequence, samples_f, N_samples):
+    def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
+        numStages_new                   = data_new.shape[1]
         assert numStages_new == self.__sustainData.getNumSamples(), "Number of stages in new data should be same as in training data"
 
         sustainData_newData             = ZScoreSustainData(data_new, numStages_new)

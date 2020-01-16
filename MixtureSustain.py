@@ -15,8 +15,6 @@ from matplotlib import pyplot as plt
 from AbstractSustain import AbstractSustainData
 from AbstractSustain import AbstractSustain
 
-import time
-
 #*******************************************
 #The data structure class for MixtureSustain. It holds the positive/negative likelihoods that get passed around and re-indexed in places.
 class MixtureSustainData(AbstractSustainData):
@@ -42,6 +40,7 @@ class MixtureSustainData(AbstractSustainData):
         return MixtureSustainData(self.L_yes[index,], self.L_no[index,], self.__numStages)
 
 #*******************************************
+#An implementation of the AbstractSustain class with z-score based events
 class MixtureSustain(AbstractSustain):
 
     def __init__(self,
@@ -52,7 +51,21 @@ class MixtureSustain(AbstractSustain):
                  N_S_max,
                  N_iterations_MCMC,
                  output_folder,
-                 dataset_name):
+                 dataset_name,
+                 use_parallel_startpoints):
+        # The initializer for the mixture model based events implementation of AbstractSustain
+        # Parameters:
+        #   L_yes                       - probability of positive class for all subjects across all biomarkers (from mixture modelling)
+        #                                 dim: number of subjects x number of biomarkers
+        #   L_no                        - probability of negative class for all subjects across all biomarkers (from mixture modelling)
+        #                                 dim: number of subjects x number of biomarkers
+        #   biomarker_labels            - the names of the biomarkers as a list of strings
+        #   N_startpoints               - number of startpoints to use in maximum likelihood step of SuStaIn, typically 25
+        #   N_S_max                     - maximum number of subtypes, should be 1 or more
+        #   N_iterations_MCMC           - number of MCMC iterations, typically 1e5 or 1e6 but can be lower for debugging
+        #   output_folder               - where to save pickle files, etc.
+        #   dataset_name                - for naming pickle files
+        #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
 
         N                               =  L_yes.shape[1] # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -67,13 +80,11 @@ class MixtureSustain(AbstractSustain):
                          N_S_max,
                          N_iterations_MCMC,
                          output_folder,
-                         dataset_name)
-
+                         dataset_name,
+                         use_parallel_startpoints)
 
     def _initialise_sequence(self, sustainData):
-        # Randomly initialises a linear z-score model ensuring that the biomarkers
-        #
-        #    seq_init                                        = randperm(size(L_yes,2));
+        # Randomly initialises a sequence
 
         S                                   = MixtureSustain.randperm_local(sustainData.getNumStages()) #np.random.permutation(sustainData.getNumStages())
         S                                   = S.reshape(1, len(S))
@@ -131,19 +142,16 @@ class MixtureSustain(AbstractSustain):
 
 
     def _optimise_parameters(self, sustainData, S_init, f_init):
-
         # Optimise the parameters of the SuStaIn model
+
         M                                   = sustainData.getNumSamples()
         N_S                                 = S_init.shape[0]
         N                                   = sustainData.getNumStages()
 
         S_opt                               = S_init.copy()  # have to copy or changes will be passed to S_init
         f_opt                               = np.array(f_init).reshape(N_S, 1, 1)
-
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
-
-
         p_perm_k                            = np.zeros((M, N + 1, N_S))
 
         for s in range(N_S):
@@ -151,9 +159,7 @@ class MixtureSustain(AbstractSustain):
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
         p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
-
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
-
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
         order_seq                           = MixtureSustain.randperm_local(N_S)    #np.random.permutation(N_S)  # this will produce different random numbers to Matlab
@@ -162,9 +168,7 @@ class MixtureSustain(AbstractSustain):
             order_bio                       = MixtureSustain.randperm_local(N) #np.random.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence            = S_opt[s]
-
                 assert(len(current_sequence)==N)
-
                 current_location            = np.array([0] * N)
                 current_location[current_sequence.astype(int)] = np.arange(N)
 
@@ -220,8 +224,8 @@ class MixtureSustain(AbstractSustain):
         return S_opt, f_opt, likelihood_opt
 
     def _perform_mcmc(self, sustainData, seq_init, f_init, n_iterations, seq_sigma, f_sigma):
-
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
+
         M                                   = sustainData.getNumSamples()
         N                                   = sustainData.getNumStages()
         N_S                                 = seq_init.shape[0]
