@@ -1,4 +1,4 @@
-LOOpySuStaIn: Leon's Object Oriented pySuStaIn
+pySuStaIn
 ============
 
 SuStaIn algorithm in Python, with a combination of mixture style (i.e. EBM style) and z-score style SuStaIn implementations.
