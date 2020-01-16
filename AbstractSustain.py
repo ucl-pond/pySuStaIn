@@ -3,8 +3,7 @@
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
 # Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 #
-# For questions/comments related to:
-# Leon's Object Oriented pySustain (LOOpySustain) implementation of AbstractSustain, ZscoreSustain, MixtureSustain classes
+# For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
 ###
 from abc import ABC, abstractmethod
