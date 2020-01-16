@@ -9,16 +9,17 @@ SuStaIn papers
 
 Dependencies
 ============
-- Python >= 2.7 (Python 3 preferred)
-- [NumPy](https://github.com/numpy/numpy)
+- Python >= 3.5 
+- [NumPy] >= 1.18 (https://github.com/numpy/numpy)
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
 - [Scikit-learn](https://scikit-learn.org) for cross-validation
 - [kde_ebm](https://github.com/noxtoby/kde_ebm_open) for mixture modelling (KDE and GMM included)
+- [pathos](https://github.com/uqfoundation/pathos) for parallelization
 
 Parallelisation
 ===============
-- TBA
+- Added parallelized startpoints
 
 Running different SuStaIn implementations
 ===============
