@@ -10,7 +10,7 @@ SuStaIn papers
 Dependencies
 ============
 - Python >= 3.5 
-- [NumPy] >= 1.18 (https://github.com/numpy/numpy)
+- [NumPy >= 1.18](https://github.com/numpy/numpy)
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
 - [Scikit-learn](https://scikit-learn.org) for cross-validation
