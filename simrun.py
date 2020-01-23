@@ -9,8 +9,8 @@ from matplotlib import cbook as cbook
 
 from simfuncs import generate_random_sustain_model, generate_data_sustain
 
-from kde_ebm.mixture_model import fit_all_kde_models, fit_all_gmm_models
-from kde_ebm import plotting
+#from kde_ebm.mixture_model import fit_all_kde_models, fit_all_gmm_models
+#from kde_ebm import plotting
 
 import warnings
 warnings.filterwarnings("ignore",category=cbook.mplDeprecation)
@@ -36,7 +36,7 @@ def main():
     N_iterations_MCMC       = int(1e5)  #int(1e6)
 
     #either 'mixture_GMM' or 'mixture_KDE' or 'zscore'
-    sustainType             = 'mixture_KDE'
+    sustainType             = 'zscore'
 
     assert sustainType in ("mixture_GMM", "mixture_KDE", "zscore"), "sustainType should be either mixture_GMM, mixture_KDE or zscore"
 
@@ -100,11 +100,11 @@ def main():
 
         if sustainType == "mixture_GMM":
             mixtures        = fit_all_gmm_models(data, labels)
-        elif sustainType == "mixture_KDE":
-            mixtures        = fit_all_kde_models(data, labels)
+#        elif sustainType == "mixture_KDE":
+#            mixtures        = fit_all_kde_models(data, labels)
 
-        fig, ax, _          = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels)
-        fig.show()
+#        fig, ax, _          = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels)
+#        fig.show()
         # fig.savefig(os.path.join(outDir, 'kde_fits.png'))
 
         L_yes               = np.zeros(data.shape)
@@ -120,7 +120,7 @@ def main():
 
     elif    sustainType == 'zscore':
 
-        sustain             = ZscoreSustain(data, Z_vals, Z_max, SuStaInLabels, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name)
+        sustain             = ZscoreSustain(data, Z_vals, Z_max, SuStaInLabels, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, False)
 
 
     samples_sequence, samples_f, _,_,_,_ = sustain.run_sustain_algorithm()
