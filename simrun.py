@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore",category=cbook.mplDeprecation)
 from ZscoreSustain  import ZscoreSustain
 from MixtureSustain import MixtureSustain
 
-import sklearn
+import sklearn.model_selection
 
 def main():
     # cross-validation
