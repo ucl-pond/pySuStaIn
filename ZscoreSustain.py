@@ -1,12 +1,10 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
+# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
-# For questions/comments related to: the SuStaIn algorithm
-# contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
 import numpy as np
 from matplotlib import pyplot as plt
@@ -73,18 +71,10 @@ class ZscoreSustain(AbstractSustain):
         num_zscores                     = Z_vals.shape[1]
         IX_vals                         = np.array([[x for x in range(N)]] * num_zscores).T
 
-        stage_zscore            = np.array([y for x in Z_vals.T for y in x])
-        stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
-        IX_select               = stage_zscore>0
-        stage_zscore            = stage_zscore[IX_select]
-        stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
-
-        num_zscores             = Z_vals.shape[1]
-        IX_vals                 = np.array([[x for x in range(N)]] * num_zscores).T
-        stage_biomarker_index   = np.array([y for x in IX_vals.T for y in x])
-        stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
-        stage_biomarker_index   = stage_biomarker_index[IX_select]
-        stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+        stage_zscore                    = np.array([y for x in Z_vals.T for y in x])
+        stage_zscore                    = stage_zscore.reshape(1, len(stage_zscore))
+        stage_biomarker_index           = np.array([y for x in IX_vals.T for y in x])
+        stage_biomarker_index           = stage_biomarker_index.reshape(1, len(stage_biomarker_index))
 
         self.stage_zscore               = stage_zscore
         self.stage_biomarker_index      = stage_biomarker_index
@@ -526,21 +516,17 @@ class ZscoreSustain(AbstractSustain):
 
     def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
-        numBio_new                   = data_new.shape[1]
-        assert numBio_new == self.__sustainData.getNumBiomarkers(), "Number of biomarkers in new data should be same as in training data"
+        numStages_new                   = data_new.shape[1]
+        assert numStages_new == self.__sustainData.getNumSamples(), "Number of stages in new data should be same as in training data"
 
-        numStages = self.__sustainData.getNumStages()
-        sustainData_newData             = ZScoreSustainData(data_new, numStages)
+        sustainData_newData             = ZScoreSustainData(data_new, numStages_new)
 
         ml_subtype,         \
         prob_ml_subtype,    \
         ml_stage,           \
-        prob_ml_stage,      \
-        prob_subtype,       \
-        prob_stage,         \
-        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+        prob_ml_stage                   = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
 
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
 
     # ********************* STATIC METHODS
     @staticmethod

@@ -1,7 +1,7 @@
 ###
 # pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41468-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
+# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
 ###
 import numpy as np
 from matplotlib import pyplot as plt
@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore",category=cbook.mplDeprecation)
 from ZscoreSustain  import ZscoreSustain
 from MixtureSustain import MixtureSustain
 
-import sklearn.model_selection
+import sklearn
 
 def main():
     # cross-validation
@@ -46,19 +46,32 @@ def main():
     Z_vals                  = np.array([[1,2,3]]*N)     # Z-scores for each biomarker
     Z_max                   = np.array([5]*N)           # maximum z-score
 
+    stage_zscore            = np.array([y for x in Z_vals.T for y in x])
+    stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+
+    IX_vals                 = np.array([[x for x in range(N)]]*3).T
+    stage_biomarker_index   = np.array([y for x in IX_vals.T for y in x])
+    stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+
+    min_biomarker_zscore    = [0]*N
+    max_biomarker_zscore    = Z_max
+    std_biomarker_zscore    = [1]*N
+
     SuStaInLabels           = []
     SuStaInStageLabels      = []
     # ['Biomarker 0', 'Biomarker 1', ..., 'Biomarker N' ]
     for i in range(N):
         SuStaInLabels.append( 'Biomarker '+str(i))
-    
+    for i in range(len(stage_zscore)):
+        SuStaInStageLabels.append('B'+str(stage_biomarker_index[i])+' - Z'+str(stage_zscore[i]))
+
     gt_f                    = [1+0.5*x for x in range(N_S_gt)]
     gt_f                    = [x/sum(gt_f) for x in gt_f][::-1]
 
     # ground truth sequence for each subtype
-    gt_sequence             = generate_random_sustain_model(Z_vals,N_S_gt)
+    gt_sequence             = generate_random_sustain_model(stage_zscore,stage_biomarker_index,N_S_gt)
 
-    N_k_gt                  = np.sum(Z_vals>0)+1
+    N_k_gt                  = np.array(stage_zscore).shape[1]+1
     subtypes                = np.random.choice(range(N_S_gt), M, replace=True, p=gt_f)
     stages                  = np.ceil(np.random.rand(M,1)*(N_k_gt+1))-1
 
@@ -66,8 +79,11 @@ def main():
     data, data_denoised, stage_value = generate_data_sustain(subtypes,
                                                              stages,
                                                              gt_sequence,
-                                                             Z_vals,
-                                                             Z_max)
+                                                             min_biomarker_zscore,
+                                                             max_biomarker_zscore,
+                                                             std_biomarker_zscore,
+                                                             stage_zscore,
+                                                             stage_biomarker_index)
 
     # choose which subjects will be cases and which will be controls
     index_case              = np.where(data[:, 0] < 1)
@@ -107,19 +123,19 @@ def main():
         sustain             = ZscoreSustain(data, Z_vals, Z_max, SuStaInLabels, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, False)
 
 
-    sustain.run_sustain_algorithm()
+    samples_sequence, samples_f, _,_,_,_ = sustain.run_sustain_algorithm()
 
     if validate:
-        test_idxs              = []
+        test_idxs           = []
 
-        cv                     = sklearn.model_selection.StratifiedKFold(n_splits=N_folds, shuffle=True)
-        cv_it                  = cv.split(data, labels)
+        cv                  = sklearn.model_selection.StratifiedKFold(n_splits=N_folds, shuffle=True)
+        cv_it               = cv.split(data, labels)
 
         for train, test in cv_it:
             test_idxs.append(test)
-        test_idxs              = np.array(test_idxs)
+        test_idxs           = np.array(test_idxs)
 
-        CVIC, loglike_matrix   = sustain.cross_validate_sustain_model(test_idxs)
+        CVIC_matrix         = sustain.cross_validate_sustain_model(test_idxs)
 
         #this part estimates cross-validated positional variance diagrams
         for i in range(N_S_max):
