@@ -5,6 +5,8 @@
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
+# For questions/comments related to: the SuStaIn algorithm
+# contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
 
 import numpy as np

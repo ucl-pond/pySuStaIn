@@ -1,19 +1,35 @@
 ###
 # pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41468-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
+# Contributors: Alex Young (alexandra.young@kcl.ac.uk)
 ###
 import numpy as np
 from scipy.stats import norm
 
-def generate_data_sustain(subtypes,stages,gt_ordering,min_biomarker_zscore,
-                          max_biomarker_zscore,std_biomarker_zscore,
-                          stage_zscore,stage_biomarker_index):
+def generate_data_sustain(subtypes,stages,gt_ordering,Z_vals,Z_max):
+    B                       = Z_vals.shape[0]
+    stage_zscore            = np.array([y for x in Z_vals.T for y in x])
+    stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+    IX_select               = stage_zscore>0
+    stage_zscore            = stage_zscore[IX_select]
+    stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+
+    num_zscores             = Z_vals.shape[1]
+    IX_vals                 = np.array([[x for x in range(B)]] * num_zscores).T
+    stage_biomarker_index   = np.array([y for x in IX_vals.T for y in x])
+    stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+    stage_biomarker_index   = stage_biomarker_index[IX_select]
+    stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+
+    min_biomarker_zscore    = [0]*B
+    max_biomarker_zscore    = Z_max
+    std_biomarker_zscore    = [1]*B
 
     N = stage_biomarker_index.shape[1]
     N_S = gt_ordering.shape[0]    
     possible_biomarkers = np.unique(stage_biomarker_index)
-    B = len(possible_biomarkers)
     stage_value = np.zeros((B,N+2,N_S))
+
     
     for s in range(N_S):
         S = gt_ordering[s,:]
@@ -37,7 +53,20 @@ def generate_data_sustain(subtypes,stages,gt_ordering,min_biomarker_zscore,
     data = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
     return data, data_denoised, stage_value
 
-def generate_random_sustain_model(stage_zscore, stage_biomarker_index, N_S):
+def generate_random_sustain_model(Z_vals, N_S):
+    B                       = Z_vals.shape[0]
+    stage_zscore            = np.array([y for x in Z_vals.T for y in x])
+    stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+    IX_select               = stage_zscore>0
+    stage_zscore            = stage_zscore[IX_select]
+    stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+
+    num_zscores             = Z_vals.shape[1]
+    IX_vals                 = np.array([[x for x in range(B)]] * num_zscores).T
+    stage_biomarker_index   = np.array([y for x in IX_vals.T for y in x])
+    stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+    stage_biomarker_index   = stage_biomarker_index[IX_select]
+    stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
 
     N = np.array(stage_zscore).shape[1]
     S = np.zeros((N_S,N))
