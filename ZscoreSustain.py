@@ -516,10 +516,11 @@ class ZscoreSustain(AbstractSustain):
 
     def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
-        numStages_new                   = data_new.shape[1]
-        assert numStages_new == self.__sustainData.getNumSamples(), "Number of stages in new data should be same as in training data"
+        numBio_new                   = data_new.shape[1]
+        assert numBio_new == self.__sustainData.getNumBiomarkers(), "Number of biomarkers in new data should be same as in training data"
 
-        sustainData_newData             = ZScoreSustainData(data_new, numStages_new)
+        numStages = self.__sustainData.getNumStages()
+        sustainData_newData             = ZScoreSustainData(data_new, numStages)
 
         ml_subtype,         \
         prob_ml_subtype,    \
