@@ -71,10 +71,18 @@ class ZscoreSustain(AbstractSustain):
         num_zscores                     = Z_vals.shape[1]
         IX_vals                         = np.array([[x for x in range(N)]] * num_zscores).T
 
-        stage_zscore                    = np.array([y for x in Z_vals.T for y in x])
-        stage_zscore                    = stage_zscore.reshape(1, len(stage_zscore))
-        stage_biomarker_index           = np.array([y for x in IX_vals.T for y in x])
-        stage_biomarker_index           = stage_biomarker_index.reshape(1, len(stage_biomarker_index))
+        stage_zscore            = np.array([y for x in Z_vals.T for y in x])
+        stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+        IX_select               = stage_zscore>0
+        stage_zscore            = stage_zscore[IX_select]
+        stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+
+        num_zscores             = Z_vals.shape[1]
+        IX_vals                 = np.array([[x for x in range(N)]] * num_zscores).T
+        stage_biomarker_index   = np.array([y for x in IX_vals.T for y in x])
+        stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+        stage_biomarker_index   = stage_biomarker_index[IX_select]
+        stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
 
         self.stage_zscore               = stage_zscore
         self.stage_biomarker_index      = stage_biomarker_index
