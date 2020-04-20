@@ -193,7 +193,7 @@ class AbstractSustain(ABC):
         fig0.savefig(self.output_folder + '/MCMC_likelihood' + str(self.N_iterations_MCMC) + '.png', bbox_inches='tight')
         fig0.show()
 
-        return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return
 
     def cross_validate_sustain_model(self, test_idxs, select_fold = []):
         # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
@@ -323,7 +323,7 @@ class AbstractSustain(ABC):
         ml_stage,               \
         prob_ml_stage                   = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence_cval, samples_f_cval, N_samples)
 
-        return CVIC_matrix, samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return CVIC_matrix, samples_sequence, samples_f
 
 
     def combine_cross_validated_sequences(self, N_subtypes, N_folds):
