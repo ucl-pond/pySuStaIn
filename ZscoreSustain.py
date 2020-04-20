@@ -1,10 +1,12 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
+# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
+# For questions/comments related to: the SuStaIn algorithm
+# contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
 import numpy as np
 from matplotlib import pyplot as plt
@@ -533,9 +535,12 @@ class ZscoreSustain(AbstractSustain):
         ml_subtype,         \
         prob_ml_subtype,    \
         ml_stage,           \
-        prob_ml_stage                   = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+        prob_ml_stage,      \
+        prob_subtype,       \
+        prob_stage,         \
+        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
 
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
     # ********************* STATIC METHODS
     @staticmethod
