@@ -6,7 +6,7 @@ SuStaIn algorithm in Python, with the option to describe the subtype progression
 Papers
 ============
 - The SuStaIn algorithm: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
-- The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), [Young et al. 2014](https://doi.org/10.1093/brain/awu176) 
+- The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176))
 - The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
 
 Dependencies
