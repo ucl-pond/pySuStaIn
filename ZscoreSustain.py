@@ -1,10 +1,12 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
+# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
+# For questions/comments related to: the SuStaIn algorithm
+# contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
 import numpy as np
 from matplotlib import pyplot as plt
@@ -71,10 +73,18 @@ class ZscoreSustain(AbstractSustain):
         num_zscores                     = Z_vals.shape[1]
         IX_vals                         = np.array([[x for x in range(N)]] * num_zscores).T
 
-        stage_zscore                    = np.array([y for x in Z_vals.T for y in x])
-        stage_zscore                    = stage_zscore.reshape(1, len(stage_zscore))
-        stage_biomarker_index           = np.array([y for x in IX_vals.T for y in x])
-        stage_biomarker_index           = stage_biomarker_index.reshape(1, len(stage_biomarker_index))
+        stage_zscore            = np.array([y for x in Z_vals.T for y in x])
+        stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+        IX_select               = stage_zscore>0
+        stage_zscore            = stage_zscore[IX_select]
+        stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
+
+        num_zscores             = Z_vals.shape[1]
+        IX_vals                 = np.array([[x for x in range(N)]] * num_zscores).T
+        stage_biomarker_index   = np.array([y for x in IX_vals.T for y in x])
+        stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+        stage_biomarker_index   = stage_biomarker_index[IX_select]
+        stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
 
         self.stage_zscore               = stage_zscore
         self.stage_biomarker_index      = stage_biomarker_index
@@ -446,14 +456,14 @@ class ZscoreSustain(AbstractSustain):
                 ax.flat[i].set_axis_off()
                 continue
 
-            this_samples_sequence           = np.squeeze(samples_sequence[ix[i], :, :]).T
+            this_samples_sequence           = samples_sequence[ix[i],:,:].T
             markers                         = np.unique(self.stage_biomarker_index)
             N                               = this_samples_sequence.shape[1]
 
             confus_matrix                   = np.zeros((N, N))
             for j in range(N):
                 confus_matrix[j, :]         = sum(this_samples_sequence == j)
-            confus_matrix                   /= float(max(this_samples_sequence.shape))
+            confus_matrix                   /= float(this_samples_sequence.shape[0])
 
             zvalues                         = np.unique(self.stage_zscore)
             N_z                             = len(zvalues)
@@ -490,8 +500,8 @@ class ZscoreSustain(AbstractSustain):
                         tick.label.set_color('black')
 
                 #ax[i].set_ylabel('Biomarker name') #, fontsize=20)
-                ax_i.set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax_i.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
+                ax_i.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
+                ax_i.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
 
             else: #**** first plot
                 ax.imshow(confus_matrix_c) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
@@ -504,8 +514,8 @@ class ZscoreSustain(AbstractSustain):
                 for tick in ax.yaxis.get_major_ticks():
                     tick.label.set_color('black')
 
-                ax.set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
+                ax.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
+                ax.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
 
         plt.tight_layout()
         if cval:
@@ -516,17 +526,21 @@ class ZscoreSustain(AbstractSustain):
 
     def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
-        numStages_new                   = data_new.shape[1]
-        assert numStages_new == self.__sustainData.getNumSamples(), "Number of stages in new data should be same as in training data"
+        numBio_new                   = data_new.shape[1]
+        assert numBio_new == self.__sustainData.getNumBiomarkers(), "Number of biomarkers in new data should be same as in training data"
 
-        sustainData_newData             = ZScoreSustainData(data_new, numStages_new)
+        numStages = self.__sustainData.getNumStages()
+        sustainData_newData             = ZScoreSustainData(data_new, numStages)
 
         ml_subtype,         \
         prob_ml_subtype,    \
         ml_stage,           \
-        prob_ml_stage                   = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+        prob_ml_stage,      \
+        prob_subtype,       \
+        prob_stage,         \
+        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
 
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
     # ********************* STATIC METHODS
     @staticmethod

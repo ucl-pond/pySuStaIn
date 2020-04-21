@@ -1,10 +1,12 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
 # Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
+# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
+# For questions/comments related to: the SuStaIn algorithm
+# contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
 from abc import ABC, abstractmethod
 
@@ -153,7 +155,10 @@ class AbstractSustain(ABC):
             ml_subtype,             \
             prob_ml_subtype,        \
             ml_stage,               \
-            prob_ml_stage                   = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence, samples_f, N_samples)   #self.subtype_and_stage_individuals(self.__data, samples_sequence, samples_f, N_samples)
+            prob_ml_stage,          \
+            prob_subtype,           \
+            prob_stage,             \
+            prob_subtype_stage               = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence, samples_f, N_samples)   #self.subtype_and_stage_individuals(self.__data, samples_sequence, samples_f, N_samples)
             if not pickle_filepath.exists():
 
                 if not os.path.exists(self.output_folder):
@@ -168,6 +173,9 @@ class AbstractSustain(ABC):
                 save_variables["prob_ml_subtype"]       = prob_ml_subtype
                 save_variables["ml_stage"]              = ml_stage
                 save_variables["prob_ml_stage"]         = prob_ml_stage
+                save_variables["prob_subtype"]          = prob_subtype
+                save_variables["prob_stage"]            = prob_stage
+                save_variables["prob_subtype_stage"]    = prob_subtype_stage
 
                 save_variables["ml_sequence_EM"]        = ml_sequence_EM
                 save_variables["ml_sequence_prev_EM"]   = ml_sequence_prev_EM
@@ -193,7 +201,7 @@ class AbstractSustain(ABC):
         fig0.savefig(self.output_folder + '/MCMC_likelihood' + str(self.N_iterations_MCMC) + '.png', bbox_inches='tight')
         fig0.show()
 
-        return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return 
 
     def cross_validate_sustain_model(self, test_idxs, select_fold = []):
         # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
@@ -211,7 +219,7 @@ class AbstractSustain(ABC):
             test_idxs                       = test_idxs[select_fold]
         Nfolds                              = len(test_idxs)
 
-        CVIC_matrix                         = np.zeros((Nfolds, self.N_S_max))
+        loglike_matrix                         = np.zeros((Nfolds, self.N_S_max))
 
         for fold in range(Nfolds):
 
@@ -248,8 +256,10 @@ class AbstractSustain(ABC):
                     samples_sequence        = loaded_variables["samples_sequence"]
                     samples_f               = loaded_variables["samples_f"]
 
-                    samples_likelihood_subj_test = loaded_variables["samples_likelihood_subj_test"]
+                    mean_likelihood_subj_test = loaded_variables["mean_likelihood_subj_test"]
                     pickle_file.close()
+
+                    samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
 
                 else:
                     ml_sequence_EM,         \
@@ -270,6 +280,8 @@ class AbstractSustain(ABC):
                     samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_test, seq_init, f_init)
 
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
+                 
+                    mean_likelihood_subj_test    = np.mean(samples_likelihood_subj_test,axis=1)
 
                     ml_sequence_prev_EM         = ml_sequence_EM
                     ml_f_prev_EM                = ml_f_EM
@@ -287,43 +299,49 @@ class AbstractSustain(ABC):
                     save_variables["samples_f"]                         = samples_f
                     save_variables["samples_likelihood"]                = samples_likelihood
 
-                    save_variables["samples_likelihood_subj_test"]      = samples_likelihood_subj_test
+                    save_variables["mean_likelihood_subj_test"]         = mean_likelihood_subj_test
 
                     pickle_file                 = open(pickle_filename_fold_s, 'wb')
                     pickle_output               = pickle.dump(save_variables, pickle_file)
                     pickle_file.close()
+   
+                loglike_matrix[fold, s]            = np.mean(np.sum(np.log(samples_likelihood_subj_test+ 1e-250),axis=0))
 
-
-                if s == self.N_S_max-1:
-                    if fold == 0:
-                        samples_sequence_cval   = samples_sequence
-                        samples_f_cval          = samples_f
-                    else:
-                        samples_sequence_cval   = np.concatenate((samples_sequence_cval,    samples_sequence), axis=2)
-                        samples_f_cval          = np.concatenate((samples_f_cval,           samples_f), axis=1)
-
-                #sum across subjects, average across MCMC samples
-                CVIC_matrix[fold, s]            = np.mean(sum(-2*np.log(samples_likelihood_subj_test)))
-
-        print("CVIC across subtype models: " + str(np.mean(CVIC_matrix, 0)))
+        print("Average test set log-likelihood for each subtype model: " + str(np.mean(loglike_matrix, 0)))
 
         import pandas as pd
         import pylab
-        df_CVIC                                 = pd.DataFrame(data = CVIC_matrix, columns = ["s_" + str(i) for i in range(self.N_S_max)])
-        df_CVIC.boxplot(grid=False)
+        df_loglike                                 = pd.DataFrame(data = loglike_matrix, columns = ["s_" + str(i) for i in range(self.N_S_max)])
+        df_loglike.boxplot(grid=False)
         for i in range(self.N_S_max):
-            y                                   = df_CVIC[["s_" + str(i)]]
+            y                                   = df_loglike[["s_" + str(i)]]
             x                                   = np.random.normal(1+i, 0.04, size=len(y)) # Add some random "jitter" to the x-axis
             pylab.plot(x, y, 'r.', alpha=0.2)
 
-        # max like subtype and stage / subject
-        N_samples                       = 1000
-        ml_subtype,             \
-        prob_ml_subtype,        \
-        ml_stage,               \
-        prob_ml_stage                   = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence_cval, samples_f_cval, N_samples)
+        CVIC = np.zeros(self.N_S_max)
 
-        return CVIC_matrix, samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        for s in range(self.N_S_max):
+            for fold in range(Nfolds):
+                pickle_filename_fold_s  = self.output_folder + '/' + self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle'
+                pickle_filepath         = Path(pickle_filename_fold_s)
+
+                pickle_file             = open(pickle_filename_fold_s, 'rb')
+
+                loaded_variables        = pickle.load(pickle_file)
+
+                mean_likelihood_subj_test = loaded_variables["mean_likelihood_subj_test"]
+                pickle_file.close()
+    
+                if fold == 0:
+                    mean_likelihood_subj_test_cval    = mean_likelihood_subj_test
+                else:
+                    mean_likelihood_subj_test_cval    = np.concatenate((mean_likelihood_subj_test_cval, mean_likelihood_subj_test), axis=0)
+
+            CVIC[s] = -2*sum(np.log(mean_likelihood_subj_test_cval))
+
+        print("CVIC for each subtype model: " + str(CVIC))
+
+        return CVIC, loglike_matrix
 
 
     def combine_cross_validated_sequences(self, N_subtypes, N_folds):
@@ -366,7 +384,7 @@ class AbstractSustain(ABC):
             samples_sequence_i              = loaded_variables_i["samples_sequence"]
             samples_f_i                     = loaded_variables_i["samples_f"]
 
-            samples_likelihood_subj_test    = loaded_variables_i["samples_likelihood_subj_test"]
+            mean_likelihood_subj_test       = loaded_variables_i["mean_likelihood_subj_test"]
 
             pickle_file.close()
 
@@ -486,7 +504,7 @@ class AbstractSustain(ABC):
                 ml_stage[i]                 = this_stage[0][0]
                 prob_ml_stage[i]            = this_prob_stage[this_stage[0][0]]
 
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
     # ********************* PROTECTED METHODS
     def _estimate_ml_sustain_model_nplus1_clusters(self, sustainData, ml_sequence_prev, ml_f_prev):
