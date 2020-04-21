@@ -456,14 +456,14 @@ class ZscoreSustain(AbstractSustain):
                 ax.flat[i].set_axis_off()
                 continue
 
-            this_samples_sequence           = np.squeeze(samples_sequence[ix[i], :, :]).T
+            this_samples_sequence           = samples_sequence[ix[i],:,:].T
             markers                         = np.unique(self.stage_biomarker_index)
             N                               = this_samples_sequence.shape[1]
 
             confus_matrix                   = np.zeros((N, N))
             for j in range(N):
                 confus_matrix[j, :]         = sum(this_samples_sequence == j)
-            confus_matrix                   /= float(max(this_samples_sequence.shape))
+            confus_matrix                   /= float(this_samples_sequence.shape[0])
 
             zvalues                         = np.unique(self.stage_zscore)
             N_z                             = len(zvalues)
@@ -500,8 +500,8 @@ class ZscoreSustain(AbstractSustain):
                         tick.label.set_color('black')
 
                 #ax[i].set_ylabel('Biomarker name') #, fontsize=20)
-                ax_i.set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax_i.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
+                ax_i.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
+                ax_i.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
 
             else: #**** first plot
                 ax.imshow(confus_matrix_c) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
@@ -514,8 +514,8 @@ class ZscoreSustain(AbstractSustain):
                 for tick in ax.yaxis.get_major_ticks():
                     tick.label.set_color('black')
 
-                ax.set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
+                ax.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
+                ax.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
 
         plt.tight_layout()
         if cval:
