@@ -1,7 +1,7 @@
 pySuStaIn
 ============
 
-SuStaIn algorithm in Python, with the option to describe the subtype progression patterns using either the event-based model or the piecewise linear z-score model.
+**Su**btype and **Sta**ging **In**ference, or SuStaIn, is an algorithm for discovery of data-driven groups or "subtypes" in chronic disorders. This repository is the Python implementation of SuStaIn, with the option to describe the subtype progression patterns using either the event-based model or the piecewise linear z-score model.
 
 Papers
 ============
