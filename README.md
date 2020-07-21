@@ -36,3 +36,8 @@ sustainType can be set to:
 SuStaIn Tutorial
 ===============  
 See the jupyter notebook for a tutorial on how to use SuStaIn using simulated data.
+
+Acknowledgement
+================
+This project has received funding from the European Union’s Horizon 2020 Research and Innovation Programme under Grant Agreements 666992. Application of SuStaIn to multiple sclerosis was supported by the International Progressive MS Alliance (IPMSA, award reference number PA-1603-08175). 
+
