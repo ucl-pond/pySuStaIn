@@ -39,11 +39,11 @@ Parallelisation
 Running different SuStaIn implementations
 ===============
 sustainType can be set to:
-  - "mixture_GMM" : SuStaIn with an event-based model progression pattern, with Gaussian mixture modelling of normal/abnormal.
-  - "mixture_KDE":  SuStaIn with an event-based model progression pattern, with Kernel Density Estimation (KDE) mixture modelling of normal/abnormal.
-  - "zscore":       SuStaIn with a piecewise linear z-score model progression pattern.
+  - `mixture_GMM` : SuStaIn with an event-based model progression pattern, with Gaussian mixture modelling of normal/abnormal.
+  - `mixture_KDE`:  SuStaIn with an event-based model progression pattern, with Kernel Density Estimation (KDE) mixture modelling of normal/abnormal.
+  - `zscore`:       SuStaIn with a piecewise linear z-score model progression pattern.
   
- See simrun.py for examples of how to run these different implementations.
+ See `simrun.py` for examples of how to run these different implementations.
 
 SuStaIn Tutorial
 ===============  
