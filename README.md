@@ -8,11 +8,11 @@ Installation
 In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and all subfolders), run:
 
 ```
-pip install -e /awkde
+pip install -e ./awkde
 pip install  .
 ```
 
-This will install the awkde package (used for mixture modelling), then the pySuStaIn package.
+This will install the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling), then the pySuStaIn package.
 
 Papers
 ============
@@ -30,7 +30,7 @@ Dependencies
 - [Scikit-learn](https://scikit-learn.org) for cross-validation
 - [kde_ebm](https://github.com/noxtoby/kde_ebm_open) for mixture modelling (KDE and GMM included)
 - [pathos](https://github.com/uqfoundation/pathos) for parallelization
-- [awkde] (https://github.com/mennthor/awkde) for KDE mixture modelling
+- [awkde](https://github.com/mennthor/awkde) for KDE mixture modelling
 
 Parallelisation
 ===============
