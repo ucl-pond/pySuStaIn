@@ -30,6 +30,7 @@ Dependencies
 - [Scikit-learn](https://scikit-learn.org) for cross-validation
 - [kde_ebm](https://github.com/noxtoby/kde_ebm_open) for mixture modelling (KDE and GMM included)
 - [pathos](https://github.com/uqfoundation/pathos) for parallelization
+- [awkde] (https://github.com/mennthor/awkde) for KDE mixture modelling
 
 Parallelisation
 ===============
