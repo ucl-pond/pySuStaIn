@@ -23,7 +23,7 @@ Papers
 
 Dependencies
 ============
-- Python >= 3.5 
+- Python >= 3.7 
 - [NumPy >= 1.18](https://github.com/numpy/numpy)
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
