@@ -1,5 +1,5 @@
 import numpy as np
-from ..distributions.gaussian import Gaussian
+from .gaussian import Gaussian
 from .gmm import ParametricMM
 from .kde import KDEMM
 
@@ -8,7 +8,6 @@ def get_prob_mat(X, mixture_models):
     """Gives the matrix of probabilities that a patient has normal/abnormal
     measurements for each of the biomarkers. Output is number of patients x
     number of biomarkers x 2.
-
     Parameters
     ----------
     X : array-like, shape(numPatients, numBiomarkers)
@@ -17,7 +16,6 @@ def get_prob_mat(X, mixture_models):
         Diagnosis labels for each of the patients.
     mixtureModels : array-like, shape(numBiomarkers,)
         List of fit mixture models for each of the biomarkers.
-
     Returns
     -------
     outProbs : array-like, shape(numPatients, numBioMarkers, 2)
@@ -55,7 +53,7 @@ def fit_all_gmm_models(X, y, implement_fixed_controls=False):
     return mixture_models
 
 
-def fit_all_kde_models(X, y, implement_fixed_controls=False):
+def fit_all_kde_models(X, y, implement_fixed_controls=False, patholog_dirn_array=None):
     #* Extract only the first two diagnoses
     msk = np.where(y<2)[0]
     X = X[msk]
@@ -64,6 +62,10 @@ def fit_all_kde_models(X, y, implement_fixed_controls=False):
     n_particp, n_biomarkers = X.shape
     kde_mixtures = []
     for i in range(n_biomarkers):
+        if patholog_dirn_array == None:
+    	    patholog_dirn = None
+        else:
+            patholog_dirn = patholog_dirn_array[i]
         bio_X = X[:, i]
         bio_y = y[~np.isnan(bio_X)]
         bio_X = bio_X[~np.isnan(bio_X)]
@@ -73,6 +75,6 @@ def fit_all_kde_models(X, y, implement_fixed_controls=False):
         #     )
         # )
         kde = KDEMM()
-        kde.fit(bio_X, bio_y,implement_fixed_controls)
+        kde.fit(bio_X, bio_y,implement_fixed_controls, patholog_dirn=patholog_dirn)
         kde_mixtures.append(kde)
     return kde_mixtures

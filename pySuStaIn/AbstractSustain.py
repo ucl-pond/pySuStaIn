@@ -1,7 +1,7 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
-# Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
+# Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (l.aksman@ucl.ac.uk)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
@@ -102,10 +102,15 @@ class AbstractSustain(ABC):
 
         np.random.seed()
 
+
+        pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
+        if not os.path.isdir(pickle_dir):
+            os.mkdir(pickle_dir)
+
         fig0, ax0                           = plt.subplots()
         for s in range(self.N_S_max):
 
-            pickle_filename_s               = self.output_folder + '/' + self.dataset_name + '_subtype' + str(s) + '.pickle'
+            pickle_filename_s               = os.path.join(pickle_dir, self.dataset_name + '_subtype' + str(s) + '.pickle')
             pickle_filepath                 = Path(pickle_filename_s)
             if pickle_filepath.exists():
                 print("Found pickle file: " + pickle_filename_s + ". Using pickled variables for " + str(s) + " subtype.")
@@ -189,19 +194,20 @@ class AbstractSustain(ABC):
             n_samples                       = self.__sustainData.getNumSamples() #self.__data.shape[0]
 
             # plot results
-            fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples)
+            fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
             fig.savefig(self.output_folder + '/' + self.dataset_name + '_subtype' + str(s) + '_PVD.png')
             fig.show()
 
-            ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="subtypes" + str(s))
+            ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
 
 
         # save and show this figure after all subtypes have been calculcated
         ax0.legend(loc='upper right')
-        fig0.savefig(self.output_folder + '/MCMC_likelihood' + str(self.N_iterations_MCMC) + '.png', bbox_inches='tight')
+        fig0.savefig(self.output_folder + '/MCMC_likelihoods.png', bbox_inches='tight')
         fig0.show()
 
-        return 
+        return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
+ 
 
     def cross_validate_sustain_model(self, test_idxs, select_fold = []):
         # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
@@ -215,18 +221,23 @@ class AbstractSustain(ABC):
         if not os.path.exists(self.output_folder):
             os.makedirs(self.output_folder)
 
-        if select_fold:
-            test_idxs                       = test_idxs[select_fold]
-        Nfolds                              = len(test_idxs)
+        pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
+        if not os.path.isdir(pickle_dir):
+            os.mkdir(pickle_dir)
+
+        if select_fold != []:
+            Nfolds                          = len(select_fold)
+        else:
+            select_fold                     = test_idxs
+            Nfolds                          = len(test_idxs)
 
         loglike_matrix                         = np.zeros((Nfolds, self.N_S_max))
 
         for fold in range(Nfolds):
 
-
-            #        print('Cross-validating fold',fold,'of',Nfolds,'with index',test_idxs[fold])
-            indx_train                      = np.array([x for x in range(self.__sustainData.getNumSamples()) if x not in test_idxs[fold]])
-            indx_test                       = test_idxs[fold]
+            indx_train                      = np.array([x for x in range(self.__sustainData.getNumSamples()) if x not in select_fold[fold]])
+            indx_test                       = select_fold[fold]
+                       
             sustainData_train               = self.__sustainData.reindex(indx_train)
             sustainData_test                = self.__sustainData.reindex(indx_test)
 
@@ -235,8 +246,8 @@ class AbstractSustain(ABC):
 
             for s in range(self.N_S_max):
 
-
-                pickle_filename_fold_s      = self.output_folder + '/' + self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle'
+     
+                pickle_filename_fold_s      = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle')
                 pickle_filepath             = Path(pickle_filename_fold_s)
 
                 if pickle_filepath.exists():
@@ -278,7 +289,7 @@ class AbstractSustain(ABC):
                     samples_sequence,       \
                     samples_f,              \
                     samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_test, seq_init, f_init)
-
+               
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
                  
                     mean_likelihood_subj_test    = np.mean(samples_likelihood_subj_test,axis=1)
@@ -311,18 +322,20 @@ class AbstractSustain(ABC):
 
         import pandas as pd
         import pylab
-        df_loglike                                 = pd.DataFrame(data = loglike_matrix, columns = ["s_" + str(i) for i in range(self.N_S_max)])
-        df_loglike.boxplot(grid=False)
+        df_loglike                                 = pd.DataFrame(data = loglike_matrix, columns = ["Subtype " + str(i+1) for i in range(self.N_S_max)])
+        df_loglike.boxplot(grid=False, fontsize=15)
         for i in range(self.N_S_max):
-            y                                   = df_loglike[["s_" + str(i)]]
+            y                                   = df_loglike[["Subtype " + str(i+1)]]
             x                                   = np.random.normal(1+i, 0.04, size=len(y)) # Add some random "jitter" to the x-axis
             pylab.plot(x, y, 'r.', alpha=0.2)
+        pylab.savefig(os.path.join(self.output_folder, 'Log_likelihoods_cv_folds.png'))
+        pylab.show()
 
         CVIC = np.zeros(self.N_S_max)
 
         for s in range(self.N_S_max):
             for fold in range(Nfolds):
-                pickle_filename_fold_s  = self.output_folder + '/' + self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle'
+                pickle_filename_fold_s  = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle')
                 pickle_filepath         = Path(pickle_filename_fold_s)
 
                 pickle_file             = open(pickle_filename_fold_s, 'rb')
@@ -348,8 +361,11 @@ class AbstractSustain(ABC):
         # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
         # so that you get more realistic estimates of variance within event positions within subtypes
 
+
+        pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
+
         #*********** load ML sequence for full model for N_subtypes
-        pickle_filename_s                   = self.output_folder + '/' + self.dataset_name + '_subtype' + str(N_subtypes-1) + '.pickle'
+        pickle_filename_s                   = os.path.join(pickle_dir, self.dataset_name + '_subtype' + str(N_subtypes-1) + '.pickle')        
         pickle_filepath                     = Path(pickle_filename_s)
 
         assert pickle_filepath.exists(), "Failed to find pickle file for full model with " + str(N_subtypes) + " subtypes."
@@ -369,7 +385,7 @@ class AbstractSustain(ABC):
         for i in range(N_folds):
 
             #load the MCMC sequences for this fold's model of N_subtypes
-            pickle_filename_fold_s          = self.output_folder + '/' + self.dataset_name + '_fold' + str(i) + '_subtype' + str(N_subtypes-1) + '.pickle'
+            pickle_filename_fold_s          = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(i) + '_subtype' + str(N_subtypes-1) + '.pickle')        
             pickle_filepath                 = Path(pickle_filename_fold_s)
 
             assert pickle_filepath.exists(), "Failed to find pickle file for fold " + str(i)
@@ -424,10 +440,10 @@ class AbstractSustain(ABC):
 
         n_samples                           = self.__sustainData.getNumSamples()
         plot_order                          = ml_sequence_EM_full[0,:].astype(int)
-        fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True, plot_order=plot_order)
+        fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True, plot_order=plot_order, title_font_size=12)
 
         # save and show this figure after all subtypes have been calculcated
-        png_filename                        = self.output_folder + '/' + self.dataset_name + 'subtype' + str(N_subtypes - 1) + '_PVD_' + str(N_folds) + 'fold_CV.png'
+        png_filename                        = self.output_folder + '/' + self.dataset_name + '_subtype' + str(N_subtypes - 1) + '_PVD_' + str(N_folds) + 'fold_CV.png'
 
         #ax.legend(loc='upper right')
         fig.savefig(png_filename, bbox_inches='tight')
@@ -567,9 +583,14 @@ class AbstractSustain(ABC):
                     # hierarchy
                     this_seq_init           = ml_sequence_prev.copy()  # have to copy or changes will be passed to ml_sequence_prev
 
+                    #replace the previous sequence with the first (row index zero) new sequence
                     this_seq_init[ix_cluster_split] = (this_ml_sequence_split[0]).reshape(this_ml_sequence_split.shape[1])
 
+                    #add the second new sequence (row index one) to the stack of sequences, 
+                    #so that you now have N_S sequences instead of N_S-1
                     this_seq_init           = np.hstack((this_seq_init.T, this_ml_sequence_split[1])).T
+                    
+                    #initialize fraction of subjects in each subtype to be uniform
                     this_f_init             = np.array([1.] * N_S) / float(N_S)
 
                     print(' + Finding ML solution from hierarchical initialisation')
@@ -921,6 +942,21 @@ class AbstractSustain(ABC):
         return seq_sigma_opt, f_sigma_opt
 
     def _evaluate_likelihood_setofsamples(self, sustainData, samples_sequence, samples_f):
+    
+        n_total                             = samples_sequence.shape[2]
+    
+        #reduce the number of samples to speed this function up
+        if n_total >= 1e6:
+            N_samples                       = int(np.round(n_total/1000))
+        elif n_total >= 1e5:
+            N_samples                       = int(np.round(n_total/100))
+        else:
+            N_samples                       = n_total        
+        select_samples                      = np.round(np.linspace(0, n_total - 1, N_samples)).astype(int)               
+    
+        samples_sequence                    = samples_sequence[:,:,select_samples]
+        samples_f                           = samples_f[:, select_samples]
+    
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
         n_iterations                        = samples_sequence.shape[2]
@@ -954,7 +990,7 @@ class AbstractSustain(ABC):
         pass
 
     @abstractmethod
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=10):
         pass
 
     @abstractmethod
