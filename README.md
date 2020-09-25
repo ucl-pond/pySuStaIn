@@ -7,10 +7,10 @@ Installation
 ============
 In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and all subfolders), run:
 
-'''
+```
 pip install -e /awkde
 pip install  .
-'''
+```
 
 This will install the awkde package (used for mixture modelling), then the pySuStaIn package.
 
