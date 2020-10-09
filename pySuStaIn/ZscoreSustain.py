@@ -10,6 +10,7 @@
 ###
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.stats import norm
 
 from pySuStaIn.AbstractSustain import AbstractSustainData
 from pySuStaIn.AbstractSustain import AbstractSustain
@@ -49,7 +50,8 @@ class ZscoreSustain(AbstractSustain):
                  N_iterations_MCMC,
                  output_folder,
                  dataset_name,
-                 use_parallel_startpoints):
+                 use_parallel_startpoints,
+                 seed):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
         #   data                        - !important! needs to be (positive) z-scores!
@@ -66,6 +68,7 @@ class ZscoreSustain(AbstractSustain):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   seed                        - random number seed
 
         N                               = data.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -104,7 +107,8 @@ class ZscoreSustain(AbstractSustain):
                          N_iterations_MCMC,
                          output_folder,
                          dataset_name,
-                         use_parallel_startpoints)
+                         use_parallel_startpoints,
+                         seed)
 
 
     def _initialise_sequence(self, sustainData):
@@ -555,6 +559,142 @@ class ZscoreSustain(AbstractSustain):
 
     # ********************* STATIC METHODS
     @staticmethod
+    def generate_random_model(Z_vals, N_S, seed=None):
+        num_biomarkers = Z_vals.shape[0]
+
+        stage_zscore = Z_vals.T.flatten()#[np.newaxis, :]
+
+        IX_select = np.nonzero(stage_zscore)[0]
+        stage_zscore = stage_zscore[IX_select]#[np.newaxis, :]
+        num_zscores = Z_vals.shape[0]
+
+        stage_biomarker_index = np.tile(np.arange(num_biomarkers), (num_zscores,))
+        stage_biomarker_index = stage_biomarker_index[IX_select]#[np.newaxis, :]
+
+        N = stage_zscore.shape[0]
+        S = np.zeros((N_S, N))
+        # Moved outside loop, no need
+        possible_biomarkers = np.unique(stage_biomarker_index)
+
+        for s in range(N_S):
+            for i in range(N):
+
+                IS_min_stage_zscore = np.full(N, False)
+    
+                for j in possible_biomarkers:
+                    IS_unselected = np.full(N, False)
+                    # I have no idea what purpose this serves, so leaving for now
+                    for k in set(range(N)) - set(S[s][:i]):
+                        IS_unselected[k] = True
+
+                    this_biomarkers = np.logical_and(
+                        stage_biomarker_index == possible_biomarkers[j],
+                        np.array(IS_unselected) == 1
+                    )
+                    if not np.any(this_biomarkers):
+                        this_min_stage_zscore = 0
+                    else:
+                        this_min_stage_zscore = np.min(stage_zscore[this_biomarkers])
+                    
+                    if this_min_stage_zscore:
+                        IS_min_stage_zscore[np.logical_and(
+                            this_biomarkers,
+                            stage_zscore == this_min_stage_zscore
+                        )] = True
+
+                events = np.arange(N)
+                possible_events = events[IS_min_stage_zscore]
+                this_index = np.ceil(np.random.rand() * len(possible_events)) - 1
+                
+                S[s][i] = possible_events[int(this_index)]
+        return S
+
+    # TODO: Refactor this as above
+    @staticmethod
+    def generate_data(subtypes, stages, gt_ordering, Z_vals, Z_max):
+        B = Z_vals.shape[0]
+        stage_zscore = np.array([y for x in Z_vals.T for y in x])
+        stage_zscore = stage_zscore.reshape(1,len(stage_zscore))
+        IX_select = stage_zscore>0
+        stage_zscore = stage_zscore[IX_select]
+        stage_zscore = stage_zscore.reshape(1,len(stage_zscore))
+
+        num_zscores = Z_vals.shape[1]
+        IX_vals = np.array([[x for x in range(B)]] * num_zscores).T
+        stage_biomarker_index = np.array([y for x in IX_vals.T for y in x])
+        stage_biomarker_index = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+        stage_biomarker_index = stage_biomarker_index[IX_select]
+        stage_biomarker_index = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+
+        min_biomarker_zscore = [0]*B
+        max_biomarker_zscore = Z_max
+        std_biomarker_zscore = [1]*B
+
+        N = stage_biomarker_index.shape[1]
+        N_S = gt_ordering.shape[0]
+
+        possible_biomarkers = np.unique(stage_biomarker_index)
+        stage_value = np.zeros((B,N+2,N_S))
+
+        for s in range(N_S):
+            S = gt_ordering[s,:]
+            S_inv = np.array([0]*N)
+            S_inv[S.astype(int)] = np.arange(N)
+            for i in range(B):
+                b = possible_biomarkers[i]
+                event_location = np.concatenate([[0], S_inv[(stage_biomarker_index == b)[0]], [N]])
+                event_value = np.concatenate([[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index == b], [max_biomarker_zscore[i]]])
+
+                for j in range(len(event_location)-1):
+
+                    if j == 0: # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
+                        index = np.arange(event_location[j],event_location[j+1]+2)
+                        stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
+                    else:
+                        index = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                        stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
+
+        M = stages.shape[0]
+        data_denoised = np.zeros((M,B))
+        for m in range(M):
+            data_denoised[m,:] = stage_value[:,int(stages[m]),subtypes[m]]
+        data = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
+
+        return data, data_denoised, stage_value
+
+    @staticmethod
     def linspace_local2(a, b, N, arange_N):
         return a + (b - a) / (N - 1.) * arange_N
 
+    # ********************* CLASS METHODS
+    @classmethod
+    def test_sustain(cls, n_biomarkers, n_samples, n_subtypes, 
+    ground_truth_subj_ids, ground_truth_subtypes, sustain_kwargs, seed=42):
+        # Set a global seed to propagate
+        np.random.seed(seed)
+        # Create Z values
+        Z_vals = np.tile(np.arange(1, 4), (n_biomarkers, 1))
+        Z_vals[0, 2] = 0
+
+        Z_max = np.full(5, n_biomarkers)
+        Z_max[2] = 2
+
+        ground_truth_sequences = cls.generate_random_model(Z_vals, n_subtypes)
+        N_stages = np.sum(Z_vals > 0) + 1
+
+        ground_truth_stages_control = np.zeros((int(np.round(n_samples * 0.25)), 1))
+        ground_truth_stages_other = np.random.randint(1, N_stages+1, (int(np.round(n_samples * 0.75)), 1))
+        ground_truth_stages = np.vstack((ground_truth_stages_control, ground_truth_stages_other)).astype(int)
+
+        data, data_denoised, stage_value = cls.generate_data(
+            ground_truth_subtypes,
+            ground_truth_stages,
+            ground_truth_sequences,
+            Z_vals,
+            Z_max
+        )
+
+        return cls(
+            data, Z_vals, Z_max,
+            **sustain_kwargs
+        )

@@ -57,7 +57,8 @@ class AbstractSustain(ABC):
                  N_iterations_MCMC,
                  output_folder,
                  dataset_name,
-                 use_parallel_startpoints):
+                 use_parallel_startpoints,
+                 seed):
         # The initializer for the abstract class
         # Parameters:
         #   sustainData                 - an instance of an AbstractSustainData implementation
@@ -67,6 +68,7 @@ class AbstractSustain(ABC):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   seed                        - random number seed
 
         assert(isinstance(sustainData, AbstractSustainData))
 
@@ -81,12 +83,16 @@ class AbstractSustain(ABC):
         self.output_folder              = output_folder
         self.dataset_name               = dataset_name
 
+        if isinstance(seed, int):
+            self.seed = seed
+            self.rng = np.random.RandomState(seed)
+
         self.use_parallel_startpoints   = use_parallel_startpoints
 
         if self.use_parallel_startpoints:
 
             np_version                  = float(np.__version__.split('.')[0] + '.' + np.__version__.split('.')[1])
-            assert (np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly.")
+            assert np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly."
 
             self.pool                   = pathos.multiprocessing.ProcessingPool() #pathos.multiprocessing.ParallelPool()
             self.pool.ncpus             = multiprocessing.cpu_count()
@@ -94,13 +100,13 @@ class AbstractSustain(ABC):
             self.pool                   = pathos.serial.SerialPool()
 
     #********************* PUBLIC METHODS
-    def run_sustain_algorithm(self):
+    def run_sustain_algorithm(self, plot=False):
         # Externally called method to start the SuStaIn algorithm after initializing the SuStaIn class object properly
 
         ml_sequence_prev_EM                 = []
         ml_f_prev_EM                        = []
 
-        np.random.seed()
+        # np.random.seed() # Messes with consistency
 
 
         pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
@@ -192,22 +198,24 @@ class AbstractSustain(ABC):
                 pickle_file.close()
 
             n_samples                       = self.__sustainData.getNumSamples() #self.__data.shape[0]
-
+            
             # plot results
-            fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
-            fig.savefig(self.output_folder + '/' + self.dataset_name + '_subtype' + str(s) + '_PVD.png')
-            fig.show()
+            if plot:
+                fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
+                fig.savefig(self.output_folder / (self.dataset_name + '_subtype' + str(s) + '_PVD.png'))
+                fig.show()
 
-            ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
+                ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
 
 
         # save and show this figure after all subtypes have been calculcated
-        ax0.legend(loc='upper right')
-        fig0.savefig(self.output_folder + '/MCMC_likelihoods.png', bbox_inches='tight')
-        fig0.show()
+        if plot:
+            ax0.legend(loc='upper right')
+            fig0.savefig(self.output_folder / 'MCMC_likelihoods.png', bbox_inches='tight')
+            fig0.show()
 
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
- 
+
 
     def cross_validate_sustain_model(self, test_idxs, select_fold = []):
         # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
@@ -237,7 +245,7 @@ class AbstractSustain(ABC):
 
             indx_train                      = np.array([x for x in range(self.__sustainData.getNumSamples()) if x not in select_fold[fold]])
             indx_test                       = select_fold[fold]
-                       
+
             sustainData_train               = self.__sustainData.reindex(indx_train)
             sustainData_test                = self.__sustainData.reindex(indx_test)
 
@@ -245,8 +253,6 @@ class AbstractSustain(ABC):
             ml_f_prev_EM                    = []
 
             for s in range(self.N_S_max):
-
-     
                 pickle_filename_fold_s      = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle')
                 pickle_filepath             = Path(pickle_filename_fold_s)
 
@@ -289,9 +295,9 @@ class AbstractSustain(ABC):
                     samples_sequence,       \
                     samples_f,              \
                     samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_test, seq_init, f_init)
-               
+
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
-                 
+
                     mean_likelihood_subj_test    = np.mean(samples_likelihood_subj_test,axis=1)
 
                     ml_sequence_prev_EM         = ml_sequence_EM
@@ -315,7 +321,7 @@ class AbstractSustain(ABC):
                     pickle_file                 = open(pickle_filename_fold_s, 'wb')
                     pickle_output               = pickle.dump(save_variables, pickle_file)
                     pickle_file.close()
-   
+
                 loglike_matrix[fold, s]            = np.mean(np.sum(np.log(samples_likelihood_subj_test+ 1e-250),axis=0))
 
         print("Average test set log-likelihood for each subtype model: " + str(np.mean(loglike_matrix, 0)))
@@ -417,8 +423,8 @@ class AbstractSustain(ABC):
             # 4. Find the order in which this fold's subtypes first appear in the sorted list
             corr_mat                        = np.zeros((N_subtypes, N_subtypes))
             for j in range(N_subtypes):
-               for k in range(N_subtypes):
-                   corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
+                for k in range(N_subtypes):
+                    corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
             set_full                        = []
             set_fold_i                      = []
             i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
@@ -443,7 +449,7 @@ class AbstractSustain(ABC):
         fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True, plot_order=plot_order, title_font_size=12)
 
         # save and show this figure after all subtypes have been calculcated
-        png_filename                        = self.output_folder + '/' + self.dataset_name + '_subtype' + str(N_subtypes - 1) + '_PVD_' + str(N_folds) + 'fold_CV.png'
+        png_filename                        = self.output_folder / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.png"
 
         #ax.legend(loc='upper right')
         fig.savefig(png_filename, bbox_inches='tight')
@@ -630,7 +636,7 @@ class AbstractSustain(ABC):
         # ml_likelihood - the likelihood of the most probable SuStaIn model
 
         partial_iter                        = partial(self._find_ml_iteration, sustainData)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
+        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -655,7 +661,7 @@ class AbstractSustain(ABC):
         #Convenience sub-function for above
 
         if self.use_parallel_startpoints:
-            np.random.seed()
+            np.random.seed(seed_num)
 
         # randomly initialise the sequence of the linear z-score model
         seq_init                        = self._initialise_sequence(sustainData)
@@ -684,7 +690,7 @@ class AbstractSustain(ABC):
         N_S                                 = 2
 
         partial_iter                        = partial(self._find_ml_mixture2_iteration, sustainData)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
+        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -710,7 +716,7 @@ class AbstractSustain(ABC):
         #Convenience sub-function for above
 
         if self.use_parallel_startpoints:
-            np.random.seed()
+            np.random.seed(seed_num)
 
         N_S                                 = 2
 
@@ -783,7 +789,7 @@ class AbstractSustain(ABC):
         #Convenience sub-function for above
 
         if self.use_parallel_startpoints:
-            np.random.seed()
+            np.random.seed(seed_num)
 
         ml_sequence,        \
         ml_f,               \
@@ -863,7 +869,6 @@ class AbstractSustain(ABC):
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
 
         p_perm_k                            = np.zeros((M, N + 1, N_S))
-
         for s in range(N_S):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S[s])  #self.__calculate_likelihood_stage_linearzscoremodel_approx(data_local, S[s])
 
@@ -916,12 +921,12 @@ class AbstractSustain(ABC):
 
         for i in range(n_passes_optimisation):
 
-            _, _, _, samples_sequence_currentpass, samples_f_currentpass, _ = self._perform_mcmc(   sustainData,
-                                                                                                     seq_init,
-                                                                                                     f_init,
-                                                                                                     n_iterations_MCMC_optimisation,
-                                                                                                     seq_sigma_currentpass,
-                                                                                                     f_sigma_currentpass)
+            _, _, _, samples_sequence_currentpass, samples_f_currentpass, _ = self._perform_mcmc(sustainData,
+                                                                                                seq_init,
+                                                                                                f_init,
+                                                                                                n_iterations_MCMC_optimisation,
+                                                                                                seq_sigma_currentpass,
+                                                                                                f_sigma_currentpass)
 
             samples_position_currentpass    = np.zeros(samples_sequence_currentpass.shape)
             for s in range(N_S):
@@ -954,7 +959,7 @@ class AbstractSustain(ABC):
             N_samples                       = n_total        
         select_samples                      = np.round(np.linspace(0, n_total - 1, N_samples)).astype(int)               
     
-        samples_sequence                    = samples_sequence[:,:,select_samples]
+        samples_sequence                    = samples_sequence[:, :, select_samples]
         samples_f                           = samples_f[:, select_samples]
     
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
@@ -999,6 +1004,16 @@ class AbstractSustain(ABC):
 
     # ********************* STATIC METHODS
     @staticmethod
+    @abstractmethod
+    def generate_random_model():
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def generate_data():
+        pass
+
+    @staticmethod
     def calc_coeff(sig):
         return 1. / np.sqrt(np.pi * 2.0) * sig
 
@@ -1006,3 +1021,8 @@ class AbstractSustain(ABC):
     def calc_exp(x, mu, sig):
         x = (x - mu) / sig
         return np.exp(-.5 * x * x)
+
+    @classmethod
+    @abstractmethod
+    def test_sustain(cls):
+        pass
