@@ -85,7 +85,6 @@ class AbstractSustain(ABC):
 
         if isinstance(seed, int):
             self.seed = seed
-            self.rng = np.random.RandomState(seed)
 
         self.use_parallel_startpoints   = use_parallel_startpoints
 
