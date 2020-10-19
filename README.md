@@ -16,7 +16,7 @@ This will install the [awkde](https://github.com/mennthor/awkde) package (used f
 
 Troubleshooting
 ============
-If the above install breaks, you may have some inteferring packages installed. One way around this would be to create a new [Anaconda](https://www.anaconda.com) environment that uses Python 3.7, then activate it and repeat the installation steps above. To do this, download and install Anaconda, then run:
+If the above install breaks, you may have some interfering packages installed. One way around this would be to create a new [Anaconda](https://www.anaconda.com) environment that uses Python 3.7, then activate it and repeat the installation steps above. To do this, download and install Anaconda, then run:
 
 ```
 conda create  --name sustain_env python=3.7
