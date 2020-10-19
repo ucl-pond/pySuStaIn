@@ -14,6 +14,17 @@ pip install  .
 
 This will install the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling), then the pySuStaIn package.
 
+Troubleshooting
+============
+If the above install breaks, you may have some inteferring packages installed. One way around this would be to create a new [Anaconda](https://www.anaconda.com) environment that uses Python 3.7, then activate it and repeat the installation steps above. To do this, download and install Anaconda, then run:
+
+```
+conda create  --name sustain_env python=3.7
+conda activate sustain_env
+```
+
+To create an environment named `sustain_env`.
+
 Papers
 ============
 - The SuStaIn algorithm: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
