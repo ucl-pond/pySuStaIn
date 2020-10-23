@@ -576,7 +576,7 @@ class AbstractSustain(ABC):
                     sustainData_i           = sustainData.reindex(ix_i)
 
                     print(' + Resolving 2 cluster problem')
-                    this_ml_sequence_split, _, _, _, _, _ = self._find_ml_mixture2(sustainData_i)
+                    this_ml_sequence_split, _, _, _, _, _ = self._find_ml_split(sustainData_i)
 
                     # Use the two subtype model combined with the other subtypes to
                     # inititialise the fitting of the next SuStaIn model in the
@@ -672,7 +672,7 @@ class AbstractSustain(ABC):
 
     #********************************************
 
-    def _find_ml_mixture2(self, sustainData):
+    def _find_ml_split(self, sustainData):
         # Fit a mixture of two models
         #
         #
@@ -683,7 +683,7 @@ class AbstractSustain(ABC):
 
         N_S                                 = 2
 
-        partial_iter                        = partial(self._find_ml_mixture2_iteration, sustainData)
+        partial_iter                        = partial(self._find_ml_split_iteration, sustainData)
         pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
@@ -706,7 +706,7 @@ class AbstractSustain(ABC):
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-    def _find_ml_mixture2_iteration(self, sustainData, seed_num):
+    def _find_ml_split_iteration(self, sustainData, seed_num):
         #Convenience sub-function for above
 
         if self.use_parallel_startpoints:

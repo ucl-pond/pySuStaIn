@@ -42,7 +42,7 @@ def main():
     # number of starting points
     N_startpoints           = 25
     # maximum number of inferred subtypes - note that this could differ from N_S_ground_truth
-    N_S_max                 = 3
+    N_S_max                 = 4
     N_iterations_MCMC       = int(1e5)  #For speed - you should use int(1e6) normally, but it can take a long time
 
     # cross-validation
@@ -50,7 +50,7 @@ def main():
     N_folds                 = 10
 
     #either 'mixture_GMM' or 'mixture_KDE' or 'zscore'
-    sustainType             = 'zscore'
+    sustainType             = 'mixture_GMM'
 
     assert sustainType in ("mixture_GMM", "mixture_KDE", "zscore"), "sustainType should be either mixture_GMM, mixture_KDE or zscore"
 
@@ -118,8 +118,8 @@ def main():
 
         np.random.seed(10)
 
-        Z_vals                  = np.array([[1, 2, 3]] * N)  # define the Z-score based events for each biomarker
-        Z_max                   = np.array([5] * N)  # maximum z-score for each biomarker
+        Z_vals                  = np.array([[1, 2, 3]] * N)     # define the Z-score based events for each biomarker
+        Z_max                   = np.array([5] * N)             # maximum z-score for each biomarker
 
         ground_truth_subj_ids   = list(np.arange(1, M+1).astype('str'))
 
@@ -154,12 +154,14 @@ def main():
 
         sustain                 = ZscoreSustain(data, Z_vals, Z_max, SuStaInLabels, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, use_parallel_startpoints)
 
-
     #****** plot the ground truth sequences
-    ground_truth_sequences  = np.expand_dims(ground_truth_sequences, axis=2)
-    ground_truth_fractions  = np.expand_dims(ground_truth_fractions, axis=1)
-    ground_truth_nsamples   = np.inf
-    fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions, ground_truth_nsamples, title_font_size=12)
+    ground_truth_sequences              = np.expand_dims(ground_truth_sequences, axis=2)
+    ground_truth_fractions_actual, _    = np.histogram(ground_truth_subtypes, bins=np.arange(N_S_ground_truth + 1) - 0.5)
+    ground_truth_fractions_actual       = ground_truth_fractions_actual/len(ground_truth_subtypes)
+    ground_truth_fractions_actual       = np.expand_dims(ground_truth_fractions_actual, axis=1)
+    ground_truth_nsamples               = np.inf
+
+    fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, title_font_size=12)
     fig.savefig(os.path.join(output_folder, 'PVD_true.png'))
     fig.show()
 
