@@ -57,7 +57,8 @@ class AbstractSustain(ABC):
                  N_iterations_MCMC,
                  output_folder,
                  dataset_name,
-                 use_parallel_startpoints):
+                 use_parallel_startpoints,
+                 seed):
         # The initializer for the abstract class
         # Parameters:
         #   sustainData                 - an instance of an AbstractSustainData implementation
@@ -67,6 +68,7 @@ class AbstractSustain(ABC):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   seed                        - random number seed
 
         assert(isinstance(sustainData, AbstractSustainData))
 
@@ -81,12 +83,14 @@ class AbstractSustain(ABC):
         self.output_folder              = output_folder
         self.dataset_name               = dataset_name
 
+        if isinstance(seed, int):
+            self.seed = seed
+
         self.use_parallel_startpoints   = use_parallel_startpoints
 
         if self.use_parallel_startpoints:
-
             np_version                  = float(np.__version__.split('.')[0] + '.' + np.__version__.split('.')[1])
-            assert (np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly.")
+            assert np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly."
 
             self.pool                   = pathos.multiprocessing.ProcessingPool() #pathos.multiprocessing.ParallelPool()
             self.pool.ncpus             = multiprocessing.cpu_count()
@@ -94,14 +98,11 @@ class AbstractSustain(ABC):
             self.pool                   = pathos.serial.SerialPool()
 
     #********************* PUBLIC METHODS
-    def run_sustain_algorithm(self):
+    def run_sustain_algorithm(self, plot=False):
         # Externally called method to start the SuStaIn algorithm after initializing the SuStaIn class object properly
 
         ml_sequence_prev_EM                 = []
         ml_f_prev_EM                        = []
-
-        np.random.seed()
-
 
         pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
         if not os.path.isdir(pickle_dir):
@@ -194,17 +195,19 @@ class AbstractSustain(ABC):
             n_samples                       = self.__sustainData.getNumSamples() #self.__data.shape[0]
 
             # plot results
-            fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
-            fig.savefig(self.output_folder + '/' + self.dataset_name + '_subtype' + str(s) + '_PVD.png')
-            fig.show()
+            if plot:
+                fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
+                fig.savefig(self.output_folder + '/' + self.dataset_name + '_subtype' + str(s) + '_PVD.png')
+                fig.show()
 
-            ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
+                ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
 
 
         # save and show this figure after all subtypes have been calculcated
-        ax0.legend(loc='upper right')
-        fig0.savefig(self.output_folder + '/MCMC_likelihoods.png', bbox_inches='tight')
-        fig0.show()
+        if plot:
+            ax0.legend(loc='upper right')
+            fig0.savefig(self.output_folder + '/MCMC_likelihoods.png', bbox_inches='tight')
+            fig0.show()
 
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
  
@@ -630,7 +633,7 @@ class AbstractSustain(ABC):
         # ml_likelihood - the likelihood of the most probable SuStaIn model
 
         partial_iter                        = partial(self._find_ml_iteration, sustainData)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
+        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -654,8 +657,8 @@ class AbstractSustain(ABC):
     def _find_ml_iteration(self, sustainData, seed_num):
         #Convenience sub-function for above
 
-        if self.use_parallel_startpoints:
-            np.random.seed()
+        # if self.use_parallel_startpoints:
+        np.random.seed(seed_num)
 
         # randomly initialise the sequence of the linear z-score model
         seq_init                        = self._initialise_sequence(sustainData)
@@ -684,7 +687,7 @@ class AbstractSustain(ABC):
         N_S                                 = 2
 
         partial_iter                        = partial(self._find_ml_split_iteration, sustainData)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
+        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -709,8 +712,8 @@ class AbstractSustain(ABC):
     def _find_ml_split_iteration(self, sustainData, seed_num):
         #Convenience sub-function for above
 
-        if self.use_parallel_startpoints:
-            np.random.seed()
+        # if self.use_parallel_startpoints:
+        np.random.seed(seed_num)
 
         N_S                                 = 2
 
@@ -756,7 +759,7 @@ class AbstractSustain(ABC):
         N_S                                 = seq_init.shape[0]
 
         partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.N_startpoints))
+        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -782,8 +785,8 @@ class AbstractSustain(ABC):
     def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_num):
         #Convenience sub-function for above
 
-        if self.use_parallel_startpoints:
-            np.random.seed()
+        # if self.use_parallel_startpoints:
+        np.random.seed(seed_num)
 
         ml_sequence,        \
         ml_f,               \
@@ -1006,3 +1009,19 @@ class AbstractSustain(ABC):
     def calc_exp(x, mu, sig):
         x = (x - mu) / sig
         return np.exp(-.5 * x * x)
+
+    # ********************* TEST METHODS
+    @staticmethod
+    @abstractmethod
+    def generate_random_model():
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def generate_data():
+        pass
+
+    @classmethod
+    @abstractmethod
+    def test_sustain(cls):
+        pass

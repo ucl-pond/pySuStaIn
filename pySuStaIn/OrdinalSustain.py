@@ -8,6 +8,7 @@
 # For questions/comments related to: the SuStaIn algorithm
 # contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
+from tqdm import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -50,7 +51,8 @@ class OrdinalSustain(AbstractSustain):
                  N_iterations_MCMC,
                  output_folder,
                  dataset_name,
-                 use_parallel_startpoints):
+                 use_parallel_startpoints,
+                 seed):
         # The initializer for the scored events model implementation of AbstractSustain
         # Parameters:
         #   prob_nl                     - probability of negative/normal class for all subjects across all biomarkers 
@@ -66,6 +68,7 @@ class OrdinalSustain(AbstractSustain):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   seed                        - random number seed
 
         N                               = prob_nl.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -107,7 +110,8 @@ class OrdinalSustain(AbstractSustain):
                          N_iterations_MCMC,
                          output_folder,
                          dataset_name,
-                         use_parallel_startpoints)
+                         use_parallel_startpoints,
+                         seed)
 
 
     def _initialise_sequence(self, sustainData):
@@ -302,9 +306,7 @@ class OrdinalSustain(AbstractSustain):
         samples_sequence[:, :, 0]           = seq_init  # don't need to copy as we don't write to 0 index
         samples_f[:, 0]                     = f_init
 
-        for i in range(n_iterations):
-            if i % (n_iterations / 10) == 0:
-                print('Iteration', i, 'of', n_iterations, ',', int(float(i) / float(n_iterations) * 100.), '% complete')
+        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations):
             if i > 0:
                 seq_order                   = np.random.permutation(N_S)  # this function returns different random numbers to Matlab
                 for s in seq_order:
@@ -385,7 +387,7 @@ class OrdinalSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=8):
 
         colour_mat                          = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]]) #, [0.5, 0, 1], [0, 1, 1]])
 
@@ -442,7 +444,7 @@ class OrdinalSustain(AbstractSustain):
                 this_colour_matrix[:, :, alter_level] = np.tile(this_confus_matrix[markers, :].reshape(N_bio, N, 1), (1, 1, sum(alter_level)))
                 confus_matrix_c             = confus_matrix_c - this_colour_matrix
 
-            TITLE_FONT_SIZE                 = 8
+            TITLE_FONT_SIZE                 = title_font_size
             X_FONT_SIZE                     = 8
             Y_FONT_SIZE                     = 7
 
@@ -515,3 +517,144 @@ class OrdinalSustain(AbstractSustain):
     def linspace_local2(a, b, N, arange_N):
         return a + (b - a) / (N - 1.) * arange_N
 
+    # ********************* TEST METHODS
+    @classmethod
+    def test_sustain(cls, n_biomarkers, n_samples, n_subtypes, ground_truth_subtypes, sustain_kwargs, seed=42):
+        # Set a global seed to propagate
+        np.random.seed(seed)
+
+        # # Set the number of biomarkers to 10
+        # N = 10
+        # # Set the number of subjects to 250
+        # M = 250
+        # # Set the ground truth number of subtypes to 2
+        # N_S_gt = 2
+        # Set the number of scores per biomarker to 3
+        N_scores = 3
+        score_vals = np.tile(np.arange(1, N_scores+1), (n_biomarkers, 1))
+
+        # Set the fraction of individuals belonging to each subtype
+        # gt_f = 1 + np.arange(n_subtypes) / 2
+        # gt_f = (gt_f/np.sum(gt_f))[::-1]
+
+        # Choose a random ground truth sequence for each subtype
+        ground_truth_sequence = cls.generate_random_model(score_vals, n_subtypes)
+
+        # Choose a random ground truth stage for each individual
+        N_stages = np.sum(score_vals>0)
+        N_k = N_stages + 1
+        # gt_subtypes = np.random.choice(range(n_subtypes), n_samples, replace=True, p=gt_f)
+        ground_truth_stages = np.ceil(np.random.rand(n_samples, 1)*N_k)-1
+
+        # Set the proportion of individuals with correct scores to 0.9
+        p_correct = 0.9
+        p_nl_dist = np.full((N_scores+1), (1-p_correct)/(N_scores))
+        p_nl_dist[0] = p_correct
+        p_score_dist = np.full((N_scores, N_scores+1), (1-p_correct)/(N_scores))
+        for score in range(N_scores):
+            p_score_dist[score,score+1] = p_correct
+
+        stage_score = score_vals.T.flatten()
+        IX_select = np.nonzero(stage_score)[0]
+        stage_score = stage_score[IX_select]
+        stage_biomarker_index = np.tile(np.arange(n_biomarkers), (N_scores,))
+        stage_biomarker_index = stage_biomarker_index[IX_select]
+
+        prob_nl, prob_score = cls.generate_data(
+            N_scores, n_samples, n_biomarkers, stage_biomarker_index, p_nl_dist,
+            p_score_dist, ground_truth_subtypes, ground_truth_sequence, ground_truth_stages, stage_score
+        )
+
+        return cls(
+            prob_nl, prob_score, score_vals,
+            **sustain_kwargs
+        )
+    
+    @staticmethod
+    def generate_random_model(Z_vals, N_S, seed=None):
+        num_biomarkers = Z_vals.shape[0]
+
+        stage_zscore = Z_vals.T.flatten()
+
+        IX_select = np.nonzero(stage_zscore)[0]
+        stage_zscore = stage_zscore[IX_select]
+        num_zscores = Z_vals.shape[0]
+
+        stage_biomarker_index = np.tile(np.arange(num_biomarkers), (num_zscores,))
+        stage_biomarker_index = stage_biomarker_index[IX_select]
+
+        N = stage_zscore.shape[0]
+        S = np.zeros((N_S, N))
+
+        possible_biomarkers = np.unique(stage_biomarker_index)
+
+        for s in range(N_S):
+            for i in range(N):
+                IS_min_stage_zscore = np.full(N, False)
+
+                for j in possible_biomarkers:
+                    IS_unselected = np.full(N, False)
+                    # I have no idea what purpose this serves, so leaving for now
+                    for k in set(range(N)) - set(S[s][:i]):
+                        IS_unselected[k] = True
+
+                    this_biomarkers = np.logical_and(
+                        stage_biomarker_index == possible_biomarkers[j],
+                        np.array(IS_unselected) == 1
+                    )
+                    if not np.any(this_biomarkers):
+                        this_min_stage_zscore = 0
+                    else:
+                        this_min_stage_zscore = np.min(stage_zscore[this_biomarkers])
+                    
+                    if this_min_stage_zscore:
+                        IS_min_stage_zscore[np.logical_and(
+                            this_biomarkers,
+                            stage_zscore == this_min_stage_zscore
+                        )] = True
+
+                events = np.arange(N)
+                possible_events = events[IS_min_stage_zscore]
+                this_index = np.ceil(np.random.rand() * len(possible_events)) - 1
+                S[s][i] = possible_events[int(this_index)]
+        return S
+
+    @staticmethod
+    def generate_data(N_scores, n_samples, n_biomarkers, stage_biomarker_index,
+    p_nl_dist, p_score_dist, ground_truth_subtypes, ground_truth_sequence, ground_truth_stages, stage_score):
+        # Simulate the data for each biomarker for each individual based on their subtype and stage
+        data = np.random.choice(range(N_scores+1), n_samples*n_biomarkers, replace=True, p=p_nl_dist)
+        data = data.reshape((n_samples, n_biomarkers))
+
+        for m in range(n_samples):
+            this_subtype = ground_truth_subtypes[m]
+            this_stage = ground_truth_stages[m,0].astype(int)
+            this_S = ground_truth_sequence[this_subtype, :].astype(int)
+            
+            this_ordered_biomarker_abnormal = stage_biomarker_index[this_S[:this_stage]]
+            this_ordered_score_abnormal = stage_score[this_S[:this_stage]]
+
+            temp_score_reached = np.zeros(n_biomarkers)
+            for b in range(n_biomarkers):
+                if (this_ordered_biomarker_abnormal==b).any():
+                    temp_score_reached[b] = np.max(
+                        this_ordered_score_abnormal[this_ordered_biomarker_abnormal==b]
+                    )
+
+            for score in range(N_scores):
+                data[m, temp_score_reached==[score+1]] = np.random.choice(
+                    range(N_scores+1),
+                    np.sum(temp_score_reached==[score+1]),
+                    replace=True,
+                    p=p_score_dist[score,:]
+                )
+
+        # Turn the data into probabilities an individual has a normal score or one of the scores included in the Scored Event model
+        prob_nl = p_nl_dist[data]
+        # TODO: Refactor as above
+        prob_score = np.zeros((n_samples, n_biomarkers, N_scores))
+        for n in range(n_biomarkers):
+            for z in range(N_scores):
+                for score in range(N_scores+1):
+                    prob_score[data[:, n] == score, n, z] = p_score_dist[z, score]
+        return prob_nl, prob_score

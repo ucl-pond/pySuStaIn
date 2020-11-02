@@ -8,13 +8,13 @@
 # For questions/comments related to: the SuStaIn algorithm
 # contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
-
+from tqdm import tqdm
 import numpy as np
 import scipy.stats as stats
 from matplotlib import pyplot as plt
 
-from  pySuStaIn.AbstractSustain import AbstractSustainData
-from  pySuStaIn.AbstractSustain import AbstractSustain
+from pySuStaIn.AbstractSustain import AbstractSustainData
+from pySuStaIn.AbstractSustain import AbstractSustain
 
 #*******************************************
 #The data structure class for MixtureSustain. It holds the positive/negative likelihoods that get passed around and re-indexed in places.
@@ -53,7 +53,8 @@ class MixtureSustain(AbstractSustain):
                  N_iterations_MCMC,
                  output_folder,
                  dataset_name,
-                 use_parallel_startpoints):
+                 use_parallel_startpoints,
+                 seed):
         # The initializer for the mixture model based events implementation of AbstractSustain
         # Parameters:
         #   L_yes                       - probability of positive class for all subjects across all biomarkers (from mixture modelling)
@@ -67,6 +68,7 @@ class MixtureSustain(AbstractSustain):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   seed                        - random number seed
 
         N                               =  L_yes.shape[1] # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -82,7 +84,8 @@ class MixtureSustain(AbstractSustain):
                          N_iterations_MCMC,
                          output_folder,
                          dataset_name,
-                         use_parallel_startpoints)
+                         use_parallel_startpoints,
+                         seed)
 
     def _initialise_sequence(self, sustainData):
         # Randomly initialises a sequence
@@ -240,9 +243,7 @@ class MixtureSustain(AbstractSustain):
         samples_sequence[:, :, 0]           = seq_init  # don't need to copy as we don't write to 0 index
         samples_f[:, 0]                     = f_init
 
-        for i in range(n_iterations):
-            if i % (n_iterations / 10) == 0:
-                print('Iteration', i, 'of', n_iterations, ',', int(float(i) / float(n_iterations) * 100.), '% complete')
+        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations):
             if i > 0:
                 seq_order                   = MixtureSustain.randperm_local(N_S) #np.random.permutation(N_S)  # this function returns different random numbers to Matlab
                 for s in seq_order:
@@ -356,6 +357,7 @@ class MixtureSustain(AbstractSustain):
             
         if plot_order is None:
             plot_order                      = samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
+
         biomarker_labels_plot_order         = [self.biomarker_labels[i].replace('_', ' ') for i in plot_order]
 
         for i in range(total_axes):        #for i in range(N_S):
@@ -462,3 +464,118 @@ class MixtureSustain(AbstractSustain):
         #return np.arange(N)
 
         return np.random.permutation(N)
+
+    # ********************* TEST METHODS
+    @classmethod
+    def test_sustain(cls, n_biomarkers, n_samples, n_subtypes, ground_truth_subtypes, sustain_kwargs, seed=42, mixture_type="mixture_GMM"):
+        # Avoid import outside of testing
+        from mixture_model import fit_all_gmm_models, fit_all_kde_models
+        # Set a global seed to propagate (particularly for mixture_model)
+        np.random.seed(seed)
+
+        ground_truth_sequences = cls.generate_random_model(n_biomarkers, n_subtypes)
+
+        N_stages = n_biomarkers
+
+        ground_truth_stages_control = np.zeros((int(np.round(n_samples * 0.25)), 1))
+        ground_truth_stages_other = np.random.randint(1, N_stages+1, (int(np.round(n_samples * 0.75)), 1))
+        ground_truth_stages = np.vstack(
+            (ground_truth_stages_control, ground_truth_stages_other)
+        ).astype(int)
+
+        data, data_denoised = cls.generate_data(
+            ground_truth_subtypes,
+            ground_truth_stages,
+            ground_truth_sequences,
+            mixture_type
+        )
+        # choose which subjects will be cases and which will be controls
+        MIN_CASE_STAGE = np.round((n_biomarkers + 1) * 0.8)
+        index_case = np.where(ground_truth_stages >=  MIN_CASE_STAGE)[0]
+        index_control = np.where(ground_truth_stages ==  0)[0]
+
+        labels = 2 * np.ones(data.shape[0], dtype=int) # 2 - intermediate value, not used in mixture model fitting
+        labels[index_case] = 1                         # 1 - cases
+        labels[index_control] = 0                      # 0 - controls
+
+        data_case_control = data[labels != 2, :]
+        labels_case_control = labels[labels != 2]
+        if mixture_type == "mixture_GMM":
+            mixtures = fit_all_gmm_models(data, labels)
+        elif mixture_type == "mixture_KDE":
+            mixtures = fit_all_kde_models(data, labels)
+        
+        L_yes = np.zeros(data.shape)
+        L_no = np.zeros(data.shape)
+        for i in range(n_biomarkers):
+            if mixture_type == "mixture_GMM":
+                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(None, data[:, i])
+            elif mixture_type == "mixture_KDE":
+                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(data[:, i].reshape(-1, 1))
+
+        return cls(
+            L_yes, L_no,
+            **sustain_kwargs
+        )
+
+    # TODO: Refactor as Zscore func
+    def generate_random_model(N_biomarkers, N_S):
+        S                                   = np.zeros((N_S, N_biomarkers))
+        #try 30 times to find a unique sequence for each subtype
+        for i in range(30): 
+            matched_others                  = False
+            for s in range(N_S):
+                S[s, :]                     = np.random.permutation(N_biomarkers)
+                #compare to all previous sequences
+                for i in range(s):
+                    if np.all(S[s, :] == S[i, :]):
+                        matched_others      = True
+            #all subtype sequences are unique, so break
+            if not matched_others:
+                break
+        if matched_others:
+            print('WARNING: Iterated 30 times and could not find unique sequences for all subtypes.')
+        return S
+
+    # TODO: Refactor as Zscore func
+    def generate_data(subtypes, stages, gt_ordering, mixture_style):
+        N_biomarkers                        = gt_ordering.shape[1]
+        N_subjects                          = len(subtypes)
+        #controls are always drawn from N(0, 1) distribution
+        mean_controls                       = np.array([0]   * N_biomarkers)
+        std_controls                        = np.array([0.25] * N_biomarkers)
+        #mean and variance for cases
+        #if using mixture_GMM, use normal distribution with mean 1 and std. devs sampled from a range
+        if mixture_style == 'mixture_GMM':
+            mean_cases                      = np.array([1.5] * N_biomarkers)
+            std_cases                       = np.random.uniform(0.25, 0.50, N_biomarkers)
+        #if using mixture_KDE, use log normal with mean 0.5 and std devs sampled from a range
+        elif mixture_style == 'mixture_KDE':
+            mean_cases                      = np.array([0.5] * N_biomarkers)
+            std_cases                       = np.random.uniform(0.2, 0.5, N_biomarkers)
+
+        data                                = np.zeros((N_subjects, N_biomarkers))
+        data_denoised                       = np.zeros((N_subjects, N_biomarkers))
+
+        stages                              = stages.astype(int)
+        #loop over all subjects, creating measurment for each biomarker based on what subtype and stage they're in
+        for i in range(N_subjects):
+            S_i                             = gt_ordering[subtypes[i], :].astype(int)
+            stage_i                         = np.asscalar(stages[i])
+
+            #fill in with ABNORMAL values up to the subject's stage
+            for j in range(stage_i):
+
+                if      mixture_style == 'mixture_KDE':
+                    sample_j                = np.random.lognormal(mean_cases[S_i[j]], std_cases[S_i[j]])
+                elif    mixture_style == 'mixture_GMM':
+                    sample_j                = np.random.normal(mean_cases[S_i[j]], std_cases[S_i[j]])
+
+                data[i, S_i[j]]             = sample_j
+                data_denoised[i, S_i[j]]    = mean_cases[S_i[j]]
+
+            # fill in with NORMAL values from the subject's stage+1 to last stage
+            for j in range(stage_i, N_biomarkers):
+                data[i, S_i[j]]             = np.random.normal(mean_controls[S_i[j]], std_controls[S_i[j]])
+                data_denoised[i, S_i[j]]    = mean_controls[S_i[j]]
+        return data, data_denoised #, stage_value
