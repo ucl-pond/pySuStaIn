@@ -226,18 +226,22 @@ class AbstractSustain(ABC):
             os.mkdir(pickle_dir)
 
         if select_fold != []:
+            if np.isscalar(select_fold):
+                select_fold                 = [select_fold]
             Nfolds                          = len(select_fold)
         else:
-            select_fold                     = test_idxs
+            select_fold                     = np.arange(len(test_idxs)) #test_idxs
             Nfolds                          = len(test_idxs)
 
-        loglike_matrix                         = np.zeros((Nfolds, self.N_S_max))
+        is_full                             = Nfolds == len(test_idxs)
 
-        for fold in range(Nfolds):
+        loglike_matrix                      = np.zeros((Nfolds, self.N_S_max))
 
-            indx_train                      = np.array([x for x in range(self.__sustainData.getNumSamples()) if x not in select_fold[fold]])
-            indx_test                       = select_fold[fold]
-                       
+        for fold in select_fold:
+
+            indx_test                       = test_idxs[fold]
+            indx_train                      = np.array([x for x in range(self.__sustainData.getNumSamples()) if x not in indx_test])
+
             sustainData_train               = self.__sustainData.reindex(indx_train)
             sustainData_test                = self.__sustainData.reindex(indx_test)
 
@@ -246,7 +250,6 @@ class AbstractSustain(ABC):
 
             for s in range(self.N_S_max):
 
-     
                 pickle_filename_fold_s      = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle')
                 pickle_filepath             = Path(pickle_filename_fold_s)
 
@@ -312,11 +315,16 @@ class AbstractSustain(ABC):
 
                     save_variables["mean_likelihood_subj_test"]         = mean_likelihood_subj_test
 
-                    pickle_file                 = open(pickle_filename_fold_s, 'wb')
-                    pickle_output               = pickle.dump(save_variables, pickle_file)
+                    pickle_file                     = open(pickle_filename_fold_s, 'wb')
+                    pickle_output                   = pickle.dump(save_variables, pickle_file)
                     pickle_file.close()
-   
-                loglike_matrix[fold, s]            = np.mean(np.sum(np.log(samples_likelihood_subj_test+ 1e-250),axis=0))
+
+                if is_full:
+                    loglike_matrix[fold, s]         = np.mean(np.sum(np.log(samples_likelihood_subj_test + 1e-250),axis=0))
+
+        if not is_full:
+            print("Cannot calculate CVIC and loglike_matrix without all folds. Rerun cross_validate_sustain_model after all folds calculated.")
+            return [], []
 
         print("Average test set log-likelihood for each subtype model: " + str(np.mean(loglike_matrix, 0)))
 
@@ -331,7 +339,7 @@ class AbstractSustain(ABC):
         pylab.savefig(os.path.join(self.output_folder, 'Log_likelihoods_cv_folds.png'))
         pylab.show()
 
-        CVIC = np.zeros(self.N_S_max)
+        CVIC                            = np.zeros(self.N_S_max)
 
         for s in range(self.N_S_max):
             for fold in range(Nfolds):
@@ -339,7 +347,6 @@ class AbstractSustain(ABC):
                 pickle_filepath         = Path(pickle_filename_fold_s)
 
                 pickle_file             = open(pickle_filename_fold_s, 'rb')
-
                 loaded_variables        = pickle.load(pickle_file)
 
                 mean_likelihood_subj_test = loaded_variables["mean_likelihood_subj_test"]
@@ -350,7 +357,7 @@ class AbstractSustain(ABC):
                 else:
                     mean_likelihood_subj_test_cval    = np.concatenate((mean_likelihood_subj_test_cval, mean_likelihood_subj_test), axis=0)
 
-            CVIC[s] = -2*sum(np.log(mean_likelihood_subj_test_cval))
+            CVIC[s]                     = -2*sum(np.log(mean_likelihood_subj_test_cval))
 
         print("CVIC for each subtype model: " + str(CVIC))
 
