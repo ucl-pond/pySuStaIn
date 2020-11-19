@@ -201,7 +201,7 @@ class ZscoreSustain(AbstractSustain):
         p_perm_k                            = np.zeros((M, N + 1))
 
         # optimised likelihood calc - take log and only call np.exp once after loop
-        sigmat                              = np.tile(self.std_biomarker_zscore, (M, 1))
+        sigmat = np.array(self.std_biomarker_zscore)
 
         factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
         coeff                               = np.log(1. / float(N + 1))
@@ -213,15 +213,21 @@ class ZscoreSustain(AbstractSustain):
             p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
         """
         # faster - do the tiling once
-        stage_value_tiled                   = np.tile(stage_value, (M, 1))
-        N_biomarkers                        = stage_value.shape[0]
-        for j in range(N + 1):
-            stage_value_tiled_j             = stage_value_tiled[:, j].reshape(M, N_biomarkers)
-            x                               = (sustainData.data - stage_value_tiled_j) / sigmat  #(data_local - stage_value_tiled_j) / sigmat
-            p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(x), 1)
-        p_perm_k                            = np.exp(p_perm_k)
+        # stage_value_tiled                   = np.tile(stage_value, (M, 1))
+        # N_biomarkers                        = stage_value.shape[0]
+        # for j in range(N + 1):
+        #     stage_value_tiled_j             = stage_value_tiled[:, j].reshape(M, N_biomarkers)
+        #     x                               = (sustainData.data - stage_value_tiled_j) / sigmat  #(data_local - stage_value_tiled_j) / sigmat
+        #     p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(x), 1)
+        # p_perm_k                            = np.exp(p_perm_k)
+
+        # even faster - do in one go
+        x = (sustainData.data[:, :, None] - stage_value) / sigmat[None, :, None]
+        p_perm_k = coeff + np.sum(factor[None, :, None] - 0.5 * np.square(x), 1)
+        p_perm_k = np.exp(p_perm_k)
 
         return p_perm_k
+
 
     def _optimise_parameters(self, sustainData, S_init, f_init):
         # Optimise the parameters of the SuStaIn model
@@ -301,7 +307,7 @@ class ZscoreSustain(AbstractSustain):
                     p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
                     total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
                     total_prob_subj         = np.sum(total_prob_stage, 1)
-                    possible_likelihood[index] = sum(np.log(total_prob_subj + 1e-250))
+                    possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
                 possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
                 max_likelihood              = max(possible_likelihood)
@@ -325,9 +331,10 @@ class ZscoreSustain(AbstractSustain):
         total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
-        likelihood_opt                      = sum(np.log(total_prob_subj + 1e-250))
+        likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
 
         return S_opt, f_opt, likelihood_opt
+
 
     def _perform_mcmc(self, sustainData, seq_init, f_init, n_iterations, seq_sigma, f_sigma):
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters

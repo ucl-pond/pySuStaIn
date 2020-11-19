@@ -126,21 +126,12 @@ class MixtureSustain(AbstractSustain):
         #**** THIS VERSION IS ROUGHLY 10x FASTER THAN THE ONE BELOW
         cp_yes                              = np.cumprod(sustainData.L_yes[:, S_int],        1)
         cp_no                               = np.cumprod(sustainData.L_no[:,  S_int[::-1]],  1)   #do the cumulative product from the end of the sequence
-        for i in arange_Np1:
 
-            if i == 0:
-                p_perm_k[:, i]              = 1 / (N + 1) * cp_no[:,N-1]
-            elif i == N:
-                p_perm_k[:, i]              = 1 / (N + 1) * cp_yes[:,N-1]
-            else:
-                p_perm_k[:, i]              = 1 / (N + 1) * cp_yes[:,i-1] * cp_no[:,N-i-1]
-
-        #**** STRAIGHTFORWARD VERSION - MUCH SLOWER
-        # for i in arange_Np1: #range(N+1):
-        #     occur                           = S_int[arange_Np1[0:i]]    #S_int[range(0, i, 1)] #S_int[0:(i - 1)]
-        #     notoccur                        = S_int[i:]
-        #
-        #     p_perm_k[:, i]                  = 1 / (N + 1) * np.prod(sustainData.L_yes[:, occur], 1) * np.prod(sustainData.L_no[:, notoccur], 1)
+        # Even faster version to avoid loops
+        p_perm_k[:, 0] = cp_no[:, -1]
+        p_perm_k[:, 1:-1] = cp_no[:, :-1][:, ::-1] * cp_yes[:, :-1]
+        p_perm_k[:, -1] = cp_yes[:, -1]
+        p_perm_k *= 1 / (N + 1)
 
         return p_perm_k
 
@@ -162,7 +153,8 @@ class MixtureSustain(AbstractSustain):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        # the second summation axis is different to Matlab version
+        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
@@ -200,7 +192,7 @@ class MixtureSustain(AbstractSustain):
                     p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
                     total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
                     total_prob_subj         = np.sum(total_prob_stage, 1)
-                    possible_likelihood[index] = sum(np.log(total_prob_subj + 1e-250))
+                    possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
                 possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
                 max_likelihood              = max(possible_likelihood)
@@ -223,7 +215,7 @@ class MixtureSustain(AbstractSustain):
         total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
-        likelihood_opt                      = sum(np.log(total_prob_subj + 1e-250))
+        likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
 
         return S_opt, f_opt, likelihood_opt
 
@@ -246,39 +238,31 @@ class MixtureSustain(AbstractSustain):
         for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations):
             if i > 0:
                 seq_order                   = MixtureSustain.randperm_local(N_S) #np.random.permutation(N_S)  # this function returns different random numbers to Matlab
-                for s in seq_order:
-                    move_event_from         = int(np.ceil(N * np.random.rand())) - 1
 
-                    current_sequence        = samples_sequence[s, :, i - 1]
+                # Abstract out seq_order loop
+                move_event_from = np.ceil(N * np.random.rand(len(seq_order))).astype(int) - 1
+                current_sequence = samples_sequence[seq_order, :, i - 1]
 
-                    current_location        = np.array([0] * N)
-                    current_location[current_sequence.astype(int)] = np.arange(N)
+                selected_event = current_sequence[np.arange(current_sequence.shape[0]), move_event_from]
 
-                    #select an event in the sequence to move
-                    selected_event          = int(current_sequence[move_event_from])
+                possible_positions = np.arange(N) + np.zeros((len(seq_order),1))
 
-                    possible_positions      = np.arange(N)
+                distance = np.arange(N) + np.zeros((len(seq_order),1)) - move_event_from[:, np.newaxis]
 
-                    distance                = possible_positions - move_event_from
+                weight = AbstractSustain.calc_coeff(seq_sigma) * AbstractSustain.calc_exp(distance, 0., seq_sigma)
+                weight = np.divide(weight, weight.sum(1)[:, None])
 
-                    if isinstance(seq_sigma, int):  # FIXME: change to float       ##if ((seq_sigma.shape[0]==1) + (seq_sigma.shape[1]==1)) == 2:
-                        this_seq_sigma      = seq_sigma
-                    else:
-                        this_seq_sigma      = seq_sigma[s, selected_event]
+                index = [np.random.choice(np.arange(len(row)), 1, replace=True, p=row)[0] for row in weight]
 
-                    # use own normal PDF because stats.norm is slow
-                    weight                  = AbstractSustain.calc_coeff(this_seq_sigma) * AbstractSustain.calc_exp(distance, 0., this_seq_sigma)
-                    weight                  /= np.sum(weight)
+                move_event_to = np.arange(N)[index]
 
-                    #TEMP: MATLAB comparison
-                    #index                   = 0
-                    index                   = np.random.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
+                r = current_sequence.shape[0]
+                # Don't need to copy, but doing it for clarity
+                new_seq = current_sequence.copy()
+                new_seq[np.arange(r), move_event_from] = new_seq[np.arange(r), move_event_to]
+                new_seq[np.arange(r), move_event_to] = selected_event
 
-                    move_event_to           = possible_positions[index]
-
-                    current_sequence        = np.delete(current_sequence, move_event_from, 0)
-                    new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
-                    samples_sequence[s, :, i] = new_sequence
+                samples_sequence[seq_order, :, i] = new_seq
 
                 new_f                       = samples_f[:, i - 1] + f_sigma * np.random.randn()
                 # TEMP: MATLAB comparison
@@ -303,7 +287,7 @@ class MixtureSustain(AbstractSustain):
             total_prob_stage                = np.sum(p_perm_k * f_val_mat, 2)
             total_prob_subj                 = np.sum(total_prob_stage, 1)
 
-            likelihood_sample               = sum(np.log(total_prob_subj + 1e-250))
+            likelihood_sample               = np.sum(np.log(total_prob_subj + 1e-250))
 
             samples_likelihood[i]           = likelihood_sample
 
@@ -314,9 +298,9 @@ class MixtureSustain(AbstractSustain):
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
 
-        perm_index                          = np.where(samples_likelihood == max(samples_likelihood))
+        perm_index                          = np.where(samples_likelihood == np.max(samples_likelihood))
         perm_index                          = perm_index[0][0]
-        ml_likelihood                       = max(samples_likelihood)
+        ml_likelihood                       = np.max(samples_likelihood)
         ml_sequence                         = samples_sequence[:, :, perm_index]
         ml_f                                = samples_f[:, perm_index]
 

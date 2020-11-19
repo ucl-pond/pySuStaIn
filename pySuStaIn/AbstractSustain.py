@@ -210,7 +210,7 @@ class AbstractSustain(ABC):
             fig0.show()
 
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
- 
+
 
     def cross_validate_sustain_model(self, test_idxs, select_fold = []):
         # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
@@ -617,8 +617,8 @@ class AbstractSustain(ABC):
                         ml_f_mat            = this_ml_f_mat[:, 0]
                     print('- ML likelihood is', this_ml_likelihood[0])
                 else:
-                    print('Cluster', ix_cluster_split + 1, 'of', N_S - 1, 'too small for subdivision')
-            print('Overall ML likelihood is', ml_likelihood)
+                    print(f'Cluster {ix_cluster_split + 1} of {N_S - 1} too small for subdivision')
+            print(f'Overall ML likelihood is', ml_likelihood)
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
@@ -875,7 +875,7 @@ class AbstractSustain(ABC):
         total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
-        loglike                             = sum(np.log(total_prob_subj + 1e-250))
+        loglike                             = np.sum(np.log(total_prob_subj + 1e-250))
 
         return loglike, total_prob_subj, total_prob_stage, total_prob_cluster, p_perm_k
 
@@ -957,7 +957,7 @@ class AbstractSustain(ABC):
             N_samples                       = n_total        
         select_samples                      = np.round(np.linspace(0, n_total - 1, N_samples)).astype(int)               
     
-        samples_sequence                    = samples_sequence[:,:,select_samples]
+        samples_sequence                    = samples_sequence[:, :, select_samples]
         samples_f                           = samples_f[:, select_samples]
     
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
