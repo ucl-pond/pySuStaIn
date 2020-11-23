@@ -235,7 +235,7 @@ class MixtureSustain(AbstractSustain):
         samples_sequence[:, :, 0]           = seq_init  # don't need to copy as we don't write to 0 index
         samples_f[:, 0]                     = f_init
 
-        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations):
+        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, position=0, leave=True):
             if i > 0:
                 seq_order                   = MixtureSustain.randperm_local(N_S) #np.random.permutation(N_S)  # this function returns different random numbers to Matlab
 

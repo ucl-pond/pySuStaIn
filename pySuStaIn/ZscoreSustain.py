@@ -573,7 +573,7 @@ class ZscoreSustain(AbstractSustain):
         Z_vals = np.tile(np.arange(1, 4), (n_biomarkers, 1))
         Z_vals[0, 2] = 0
 
-        Z_max = np.full(5, n_biomarkers)
+        Z_max = np.full((n_biomarkers,), 5)
         Z_max[2] = 2
 
         ground_truth_sequences = cls.generate_random_model(Z_vals, n_subtypes)
@@ -681,6 +681,7 @@ class ZscoreSustain(AbstractSustain):
             for i in range(B):
                 b = possible_biomarkers[i]
                 event_location = np.concatenate([[0], S_inv[(stage_biomarker_index == b)[0]], [N]])
+
                 event_value = np.concatenate([[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index == b], [max_biomarker_zscore[i]]])
 
                 for j in range(len(event_location)-1):
