@@ -31,6 +31,12 @@ Papers
 - The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176))
 - The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
 - Implementation in multiple sclerosis (predicting treatment response): [Eshaghi et al. 2020](https://www.medrxiv.org/content/10.1101/19011080v2). The trained model is available [here](https://github.com/armaneshaghi/trained_models_MS_SuStaIn). 
+- Application to tau PET data in Alzheimer's disease: [Vogel, et al., 2020](https://doi.org/10.1101/2020.08.20.20176883)
+
+Quotes
+============
+> _(The authors) have also persuaded me that (SuStaIn is) as clever as e.g. Heiko Braak's brain, (and) can infer longitudinal trajectories based on cross-sectional observations._
+> - Anonymous reviewer
 
 Dependencies
 ============
