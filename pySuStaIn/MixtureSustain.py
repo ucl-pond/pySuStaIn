@@ -1,7 +1,7 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
-# Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk)
+# Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (l.aksman@ucl.ac.uk)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
@@ -13,8 +13,8 @@ import numpy as np
 import scipy.stats as stats
 from matplotlib import pyplot as plt
 
-from AbstractSustain import AbstractSustainData
-from AbstractSustain import AbstractSustain
+from  pySuStaIn.AbstractSustain import AbstractSustainData
+from  pySuStaIn.AbstractSustain import AbstractSustain
 
 #*******************************************
 #The data structure class for MixtureSustain. It holds the positive/negative likelihoods that get passed around and re-indexed in places.
@@ -41,7 +41,7 @@ class MixtureSustainData(AbstractSustainData):
         return MixtureSustainData(self.L_yes[index,], self.L_no[index,], self.__numStages)
 
 #*******************************************
-#An implementation of the AbstractSustain class with z-score based events
+#An implementation of the AbstractSustain class with mixture model based events
 class MixtureSustain(AbstractSustain):
 
     def __init__(self,
@@ -321,7 +321,7 @@ class MixtureSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=10):
 
         temp_mean_f                         = np.mean(samples_f, 1)
         vals                                = np.sort(temp_mean_f)[::-1]
@@ -333,51 +333,77 @@ class MixtureSustain(AbstractSustain):
         N_bio                               = len(self.biomarker_labels)
 
         N_stages                            = samples_sequence.shape[1]
-
-        #confus_matrix_plotting              = zeros(size(samples_sequence, 2), size(samples_sequence, 2), size(samples_sequence, 1));
+        N_MCMC_samples                      = samples_sequence.shape[2]
+        
         confus_matrix_plotting              = np.zeros((N_stages, N_stages, N_S))
 
-        if N_S > 1:
-            fig, ax                         = plt.subplots(1, N_S)
-        else:
+#         if N_S > 1:
+#             fig, ax                         = plt.subplots(1, N_S)
+#         else:
+#             fig, ax                         = plt.subplots()
+        if N_S == 1:
             fig, ax                         = plt.subplots()
-
+            total_axes                      = 1;
+        elif N_S < 3:
+            fig, ax                         = plt.subplots(1, N_S)
+            total_axes                      = N_S
+        elif N_S < 7:
+            fig, ax                         = plt.subplots(2, int(np.ceil(N_S / 2)))
+            total_axes                      = 2 * int(np.ceil(N_S / 2))
+        else:
+            fig, ax                         = plt.subplots(3, int(np.ceil(N_S / 3)))
+            total_axes                      = 3 * int(np.ceil(N_S / 3))
+            
         if plot_order is None:
             plot_order                      = samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
         biomarker_labels_plot_order         = [self.biomarker_labels[i].replace('_', ' ') for i in plot_order]
 
-        for i in range(N_S):
-            this_samples_sequence           = np.squeeze(samples_sequence[ix[i], :, :]).T
+        for i in range(total_axes):        #for i in range(N_S):
 
+            if i not in range(N_S):
+                ax.flat[i].set_axis_off()
+                continue
+
+            this_samples_sequence           = samples_sequence[ix[i],:,:].T
+		        	
             N                               = this_samples_sequence.shape[1]
 
             confus_matrix                   = np.zeros((N, N))
             for j in range(N):
                 confus_matrix[j, :]         = sum(this_samples_sequence == j)
-            confus_matrix                   /= float(max(this_samples_sequence.shape))
+            confus_matrix                   /= N_MCMC_samples #float(max(this_samples_sequence.shape))
 
             out_mat_i                       = np.tile(1 - confus_matrix[plot_order,:].reshape(N, N, 1), (1,1,3))
 
             #this_colour_matrix[:, :, alter_level] = np.tile(this_confus_matrix[markers, :].reshape(N_bio, N, 1), (1, 1, sum(alter_level)))
 
-            TITLE_FONT_SIZE                 = 8
-            X_FONT_SIZE                     = 8
-            Y_FONT_SIZE                     = 7 #10
-            if N_S > 1:
-                ax[i].imshow(out_mat_i, interpolation='nearest')      #, cmap=plt.cm.Blues)
-                ax[i].set_xticks(np.arange(N))
-                ax[i].set_xticklabels(range(1, N+1), fontsize=X_FONT_SIZE) #rotation=45,
+            TITLE_FONT_SIZE                 = title_font_size
+            X_FONT_SIZE                     = 10 #8
+            Y_FONT_SIZE                     = 10 #7
 
-                ax[i].set_yticks(np.arange(N_bio))
-                ax[i].set_yticklabels([]) #['']* N_bio)
+            if cval == False:                
+                if n_samples != np.inf:
+                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i])  + r', n=' + str(int(np.round(vals[i] * n_samples)))  + ')'
+                else:
+                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i]) + ')'
+            else:
+                title_i                     = 'Subtype ' + str(i+1) + ' cross-validated'
+
+            if N_S > 1:
+                ax_i                        = ax.flat[i] #ax[i]
+                ax_i.imshow(out_mat_i, interpolation='nearest')      #, cmap=plt.cm.Blues)
+                ax_i.set_xticks(np.arange(N))
+                ax_i.set_xticklabels(range(1, N+1), fontsize=X_FONT_SIZE) #rotation=45,
+
+                ax_i.set_yticks(np.arange(N_bio))
+                ax_i.set_yticklabels([]) #['']* N_bio)
                 if i == 0:
-                    ax[i].set_yticklabels(np.array(biomarker_labels_plot_order, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)      #rotation=30, ha='right', rotation_mode='anchor'
-                    for tick in ax[i].yaxis.get_major_ticks():
+                    ax_i.set_yticklabels(np.array(biomarker_labels_plot_order, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)      #rotation=30, ha='right', rotation_mode='anchor'
+                    for tick in ax_i.yaxis.get_major_ticks():
                         tick.label.set_color('black')
 
-                #ax[i].set_ylabel('Biomarker name') #, fontsize=20)
-                ax[i].set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax[i].set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
+                ax_i.set_xlabel('Event position', fontsize=X_FONT_SIZE)
+                ax_i.set_title(title_i, fontsize=TITLE_FONT_SIZE)
 
             else: #**** one subtype
                 ax.imshow(out_mat_i) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
@@ -392,11 +418,11 @@ class MixtureSustain(AbstractSustain):
 
                 #ax.set_ylabel('Biomarker name') #, fontsize=20)
                 ax.set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + ', n=' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
-
+                ax.set_title(title_i, fontsize=TITLE_FONT_SIZE)
+                    
         plt.tight_layout()
-        if cval:
-            fig.suptitle('Cross validation')
+        #if cval:
+        #    fig.suptitle('Cross validation')
 
         return fig, ax
 

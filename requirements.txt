@@ -1,0 +1,8 @@
+#you should have python 3.7 or higher to use numpy 1.18
+numpy>=1.18
+scipy
+matplotlib==3.0.0
+pathos
+sklearn
+pandas
+awkde

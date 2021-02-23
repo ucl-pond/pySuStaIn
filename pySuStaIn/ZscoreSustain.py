@@ -1,7 +1,7 @@
 ###
 # pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
-# Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
+# Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (l.aksman@ucl.ac.uk)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
 #
 # For questions/comments related to: object orient implementation of pySustain
 # contact: Leon Aksman (l.aksman@ucl.ac.uk)
@@ -11,8 +11,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 
-from AbstractSustain import AbstractSustainData
-from AbstractSustain import AbstractSustain
+from pySuStaIn.AbstractSustain import AbstractSustainData
+from pySuStaIn.AbstractSustain import AbstractSustain
 
 #*******************************************
 #The data structure class for ZscoreSustain. It holds the z-scored data that gets passed around and re-indexed in places.
@@ -70,10 +70,7 @@ class ZscoreSustain(AbstractSustain):
         N                               = data.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
 
-        num_zscores                     = Z_vals.shape[1]
-        IX_vals                         = np.array([[x for x in range(N)]] * num_zscores).T
-
-        stage_zscore            = np.array([y for x in Z_vals.T for y in x])
+        stage_zscore            = Z_vals.T.flatten()    #np.array([y for x in Z_vals.T for y in x])
         stage_zscore            = stage_zscore.reshape(1,len(stage_zscore))
         IX_select               = stage_zscore>0
         stage_zscore            = stage_zscore[IX_select]
@@ -81,7 +78,7 @@ class ZscoreSustain(AbstractSustain):
 
         num_zscores             = Z_vals.shape[1]
         IX_vals                 = np.array([[x for x in range(N)]] * num_zscores).T
-        stage_biomarker_index   = np.array([y for x in IX_vals.T for y in x])
+        stage_biomarker_index   = IX_vals.T.flatten()   #np.array([y for x in IX_vals.T for y in x])
         stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
         stage_biomarker_index   = stage_biomarker_index[IX_select]
         stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
@@ -238,7 +235,7 @@ class ZscoreSustain(AbstractSustain):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted, axis=(1,2), keepdims=True)
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
@@ -312,9 +309,10 @@ class ZscoreSustain(AbstractSustain):
             S_opt[s]                        = this_S
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        #p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted, axis=(1, 2), keepdims=True)
+        
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
-
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
 
@@ -424,7 +422,7 @@ class ZscoreSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=10):
 
         colour_mat                          = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]]) #, [0.5, 0, 1], [0, 1, 1]])
 
@@ -481,9 +479,17 @@ class ZscoreSustain(AbstractSustain):
                 this_colour_matrix[:, :, alter_level] = np.tile(this_confus_matrix[markers, :].reshape(N_bio, N, 1), (1, 1, sum(alter_level)))
                 confus_matrix_c             = confus_matrix_c - this_colour_matrix
 
-            TITLE_FONT_SIZE                 = 8
-            X_FONT_SIZE                     = 8
-            Y_FONT_SIZE                     = 7
+            TITLE_FONT_SIZE                 = title_font_size
+            X_FONT_SIZE                     = 10 #8
+            Y_FONT_SIZE                     = 10 #7 
+
+            if cval == False:                
+                if n_samples != np.inf:
+                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i])  + r', n=' + str(int(np.round(vals[i] * n_samples)))  + ')'
+                else:
+                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i]) + ')'
+            else:
+                title_i                     = 'Subtype ' + str(i+1) + ' cross-validated'
 
             # must be a smarter way of doing this, but subplots(1,1) doesn't produce an array...
             if N_S > 1:
@@ -501,8 +507,8 @@ class ZscoreSustain(AbstractSustain):
 
                 #ax[i].set_ylabel('Biomarker name') #, fontsize=20)
                 ax_i.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
-                ax_i.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
-
+                ax_i.set_title(title_i, fontsize=TITLE_FONT_SIZE)
+        
             else: #**** first plot
                 ax.imshow(confus_matrix_c) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
                 ax.set_xticks(np.arange(N))
@@ -515,22 +521,19 @@ class ZscoreSustain(AbstractSustain):
                     tick.label.set_color('black')
 
                 ax.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
-                ax.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
-
+                ax.set_title(title_i, fontsize=TITLE_FONT_SIZE)
+                
         plt.tight_layout()
-        if cval:
-            fig.suptitle('Cross validation')
+        #if cval:
+        #    fig.suptitle('Cross validation')
 
         return fig, ax
 
 
     def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
-        numBio_new                   = data_new.shape[1]
-        assert numBio_new == self.__sustainData.getNumBiomarkers(), "Number of biomarkers in new data should be same as in training data"
-
-        numStages = self.__sustainData.getNumStages()
-        sustainData_newData             = ZScoreSustainData(data_new, numStages)
+        numStages_new                   = self.__sustainData.getNumStages() #data_new.shape[1]
+        sustainData_newData             = ZScoreSustainData(data_new, numStages_new)
 
         ml_subtype,         \
         prob_ml_subtype,    \
