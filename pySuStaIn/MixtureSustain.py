@@ -423,9 +423,12 @@ class MixtureSustain(AbstractSustain):
         ml_subtype,         \
         prob_ml_subtype,    \
         ml_stage,           \
-        prob_ml_stage                   = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+        prob_ml_stage,      \
+        prob_subtype,       \
+        prob_stage,         \
+        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
 
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
     # ********************* STATIC METHODS
     @staticmethod
