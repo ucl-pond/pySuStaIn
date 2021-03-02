@@ -110,9 +110,12 @@ if __name__ == "__main__":
         help="Name of single class to create new validation"
     )
     args = parser.parse_args()
-    # Require input for replacing validation results
-    proceed = input("Warning, this will override existing validation results. Do you want to continue?")
-    # proceed = True
+    # Check if file already exists
+    if (Path.cwd() / f"{args.sustainclass}_results.csv").is_file():
+        # Require input for replacing existing validation results
+        proceed = input("Warning, this will override existing validation results. Do you want to continue?")
+    else:
+        proceed = True
     if proceed:
         if args.sustainclass:
             class_dict = {

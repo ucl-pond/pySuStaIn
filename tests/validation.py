@@ -127,7 +127,6 @@ if __name__ == "__main__":
         help="Name of single class to create new validation"
     )
     args = parser.parse_args()
-
     # Test all sustain subclasses
     if args.full:
         sustain_classes = pySuStaIn.AbstractSustain.__subclasses__()
@@ -137,5 +136,4 @@ if __name__ == "__main__":
             i.__name__: i for i in pySuStaIn.AbstractSustain.__subclasses__()
         }
         sustain_classes = [class_dict[args.sustainclass]]
-
     test(args.seed, sustain_classes, args.time)
