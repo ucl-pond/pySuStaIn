@@ -728,9 +728,8 @@ class AbstractSustain(ABC):
 
             temp_N_cluster                  = np.zeros(N_S)
             for s in range(1, N_S + 1):
-                temp_N_cluster              = np.sum((cluster_assignment == s).astype(int),
-                                        0)  # FIXME? this means the last index always defines the sum...
-            min_N_cluster                   = min([temp_N_cluster])
+                temp_N_cluster[s-1]         = np.sum((cluster_assignment == s).astype(int),0)
+            min_N_cluster                   = min(temp_N_cluster)
 
         # initialise the stages of the two models by fitting a single model to each of the two sets of individuals
         seq_init                            = np.zeros((N_S, sustainData.getNumStages()))
