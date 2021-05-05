@@ -27,11 +27,14 @@ To create an environment named `sustain_env`.
 
 Papers
 ============
+Methods:
 - The SuStaIn algorithm: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
 - The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176) or non-parametric kernel density estimation [Firth et al. 2020](https://doi.org/10.1002/alz.12083))
 - The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
-- Implementation in multiple sclerosis (predicting treatment response): [Eshaghi et al. 2021](https://doi.org/10.1038/s41467-021-22265-2). The trained model is available [here](https://github.com/armaneshaghi/trained_models_MS_SuStaIn). 
-- Application to tau PET data in Alzheimer's disease: [Vogel, et al., 2021](https://doi.org/10.1038/s41591-021-01309-6)
+Applications:
+- Multiple sclerosis (predicting treatment response): [Eshaghi et al. 2021](https://doi.org/10.1038/s41467-021-22265-2). The trained model is available [here](https://github.com/armaneshaghi/trained_models_MS_SuStaIn). 
+- Tau PET data in Alzheimer's disease: [Vogel et al., 2021](https://doi.org/10.1038/s41591-021-01309-6)
+- COPD: [Young et al., 2020](https://doi.org/10.1164/rccm.201908-1600OC)
 
 Dependencies
 ============
@@ -63,7 +66,7 @@ See the jupyter notebook in the notebooks folder for a tutorial on how to use Su
 
 Acknowledgement
 ================
-If you use SuStaIn, please cite [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) for the SuStaIn algorithm, and the corresponding progression pattern model you use, e.g. [piecewise linear z-score model](https://doi.org/10.1038/s41467-018-05892-0), [event-based model](https://doi.org/10.1016/j.neuroimage.2012.01.062) (with [gaussian mixture modelling](https://doi.org/10.1093/brain/awu176) or [kernel density estimation](https://doi.org/10.1002/alz.12083)).
+If you use SuStaIn, please cite [the SuStaIn algorithm](https://doi.org/10.1038/s41467-018-05892-0) as well as the corresponding progression pattern model you use, e.g. [piecewise linear z-score model](https://doi.org/10.1038/s41467-018-05892-0), [event-based model](https://doi.org/10.1016/j.neuroimage.2012.01.062) (with [gaussian mixture modelling](https://doi.org/10.1093/brain/awu176) or [kernel density estimation](https://doi.org/10.1002/alz.12083)).
 
 Funding
 ================
