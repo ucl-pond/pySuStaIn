@@ -34,8 +34,8 @@ Methods:
 
 Applications:
 - Multiple sclerosis (predicting treatment response): [Eshaghi et al. 2021](https://doi.org/10.1038/s41467-021-22265-2). The trained model is available [here](https://github.com/armaneshaghi/trained_models_MS_SuStaIn). 
-- Tau PET data in Alzheimer's disease: [Vogel et al., 2021](https://doi.org/10.1038/s41591-021-01309-6)
-- COPD: [Young et al., 2020](https://doi.org/10.1164/rccm.201908-1600OC)
+- Tau PET data in Alzheimer's disease: [Vogel et al. 2021](https://doi.org/10.1038/s41591-021-01309-6)
+- COPD: [Young et al. 2020](https://doi.org/10.1164/rccm.201908-1600OC)
 
 Dependencies
 ============
