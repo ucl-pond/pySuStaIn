@@ -10,6 +10,7 @@
 ###
 from abc import ABC, abstractmethod
 
+from tqdm import tqdm
 import numpy as np
 import scipy.stats as stats
 from matplotlib import pyplot as plt
@@ -107,8 +108,8 @@ class AbstractSustain(ABC):
         pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
         if not os.path.isdir(pickle_dir):
             os.mkdir(pickle_dir)
-
-        fig0, ax0                           = plt.subplots()
+        if plot:
+            fig0, ax0                           = plt.subplots()
         for s in range(self.N_S_max):
 
             pickle_filename_s               = os.path.join(pickle_dir, self.dataset_name + '_subtype' + str(s) + '.pickle')
@@ -197,22 +198,22 @@ class AbstractSustain(ABC):
             # plot results
             if plot:
                 fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
-                fig.savefig(self.output_folder + '/' + self.dataset_name + '_subtype' + str(s) + '_PVD.png')
+                fig.savefig(Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.png")
                 fig.show()
 
                 ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
 
-
         # save and show this figure after all subtypes have been calculcated
         if plot:
             ax0.legend(loc='upper right')
-            fig0.savefig(self.output_folder + '/MCMC_likelihoods.png', bbox_inches='tight')
+            fig0.tight_layout()
+            fig0.savefig(Path(self.output_folder) / "MCMC_likelihoods.png", bbox_inches='tight')
             fig0.show()
 
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
 
 
-    def cross_validate_sustain_model(self, test_idxs, select_fold = []):
+    def cross_validate_sustain_model(self, test_idxs, select_fold = [], plot=False):
         # Cross-validate the SuStaIn model by running the SuStaIn algorithm (E-M
         # and MCMC) on a training dataset and evaluating the model likelihood on a test
         # dataset.
@@ -236,8 +237,7 @@ class AbstractSustain(ABC):
 
         loglike_matrix                         = np.zeros((Nfolds, self.N_S_max))
 
-        for fold in range(Nfolds):
-
+        for fold in tqdm(range(Nfolds), "Folds: ", Nfolds, position=0, leave=True):
             indx_train                      = np.array([x for x in range(self.__sustainData.getNumSamples()) if x not in select_fold[fold]])
             indx_test                       = select_fold[fold]
                        
@@ -248,8 +248,6 @@ class AbstractSustain(ABC):
             ml_f_prev_EM                    = []
 
             for s in range(self.N_S_max):
-
-     
                 pickle_filename_fold_s      = os.path.join(pickle_dir, self.dataset_name + '_fold' + str(fold) + '_subtype' + str(s) + '.pickle')
                 pickle_filepath             = Path(pickle_filename_fold_s)
 
@@ -300,9 +298,6 @@ class AbstractSustain(ABC):
                     ml_sequence_prev_EM         = ml_sequence_EM
                     ml_f_prev_EM                = ml_f_EM
 
-                    if not os.path.exists(self.output_folder):
-                        os.makedirs(self.output_folder)
-
                     save_variables                                      = {}
                     save_variables["ml_sequence_EM"]                    = ml_sequence_EM
                     save_variables["ml_sequence_prev_EM"]               = ml_sequence_prev_EM
@@ -318,21 +313,22 @@ class AbstractSustain(ABC):
                     pickle_file                 = open(pickle_filename_fold_s, 'wb')
                     pickle_output               = pickle.dump(save_variables, pickle_file)
                     pickle_file.close()
-   
+
                 loglike_matrix[fold, s]            = np.mean(np.sum(np.log(samples_likelihood_subj_test+ 1e-250),axis=0))
 
-        print("Average test set log-likelihood for each subtype model: " + str(np.mean(loglike_matrix, 0)))
+        print(f"Average test set log-likelihood for each subtype model: {np.mean(loglike_matrix, 0)}")
 
-        import pandas as pd
-        import pylab
-        df_loglike                                 = pd.DataFrame(data = loglike_matrix, columns = ["Subtype " + str(i+1) for i in range(self.N_S_max)])
-        df_loglike.boxplot(grid=False, fontsize=15)
-        for i in range(self.N_S_max):
-            y                                   = df_loglike[["Subtype " + str(i+1)]]
-            x                                   = np.random.normal(1+i, 0.04, size=len(y)) # Add some random "jitter" to the x-axis
-            pylab.plot(x, y, 'r.', alpha=0.2)
-        pylab.savefig(os.path.join(self.output_folder, 'Log_likelihoods_cv_folds.png'))
-        pylab.show()
+        if plot:
+            import pandas as pd
+            import pylab
+            df_loglike                                 = pd.DataFrame(data = loglike_matrix, columns = ["Subtype " + str(i+1) for i in range(self.N_S_max)])
+            df_loglike.boxplot(grid=False, fontsize=15)
+            for i in range(self.N_S_max):
+                y                                   = df_loglike[["Subtype " + str(i+1)]]
+                x                                   = np.random.normal(1+i, 0.04, size=len(y)) # Add some random "jitter" to the x-axis
+                pylab.plot(x, y, 'r.', alpha=0.2)
+            pylab.savefig(Path(self.output_folder) / 'Log_likelihoods_cv_folds.png')
+            pylab.show()
 
         CVIC = np.zeros(self.N_S_max)
 
@@ -446,7 +442,7 @@ class AbstractSustain(ABC):
         fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True, plot_order=plot_order, title_font_size=12)
 
         # save and show this figure after all subtypes have been calculcated
-        png_filename                        = self.output_folder + '/' + self.dataset_name + '_subtype' + str(N_subtypes - 1) + '_PVD_' + str(N_folds) + 'fold_CV.png'
+        png_filename                        = Path(self.output_folder) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.png"
 
         #ax.legend(loc='upper right')
         fig.savefig(png_filename, bbox_inches='tight')
