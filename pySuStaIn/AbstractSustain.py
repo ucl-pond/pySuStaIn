@@ -716,13 +716,13 @@ class AbstractSustain(ABC):
         # randomly initialise individuals as belonging to one of the two subtypes (clusters)
         min_N_cluster                       = 0
         while min_N_cluster == 0:
-            cluster_assignment              = np.array([np.ceil(x) for x in N_S * np.random.rand(sustainData.getNumSamples())]).astype(int)
-
-            temp_N_cluster                  = np.zeros(N_S)
-            for s in range(1, N_S + 1):
-                temp_N_cluster              = np.sum((cluster_assignment == s).astype(int),
-                                        0)  # FIXME? this means the last index always defines the sum...
-            min_N_cluster                   = min([temp_N_cluster])
+            cluster_assignment = np.ceil(N_S * np.random.rand(sustainData.getNumSamples())).astype(int)
+            # Count cluster sizes
+            # Guarantee 1s and 2s counts with minlength=3
+            # Ignore 0s count with [1:]
+            cluster_sizes = np.bincount(cluster_assignment, minlength=3)[1:]
+            # Get the minimum cluster size
+            min_N_cluster = cluster_sizes.min()
 
         # initialise the stages of the two models by fitting a single model to each of the two sets of individuals
         seq_init                            = np.zeros((N_S, sustainData.getNumStages()))
