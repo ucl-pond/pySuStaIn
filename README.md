@@ -31,6 +31,7 @@ Methods:
 - The SuStaIn algorithm: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
 - The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176) or non-parametric kernel density estimation [Firth et al. 2020](https://doi.org/10.1002/alz.12083))
 - The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
+
 Applications:
 - Multiple sclerosis (predicting treatment response): [Eshaghi et al. 2021](https://doi.org/10.1038/s41467-021-22265-2). The trained model is available [here](https://github.com/armaneshaghi/trained_models_MS_SuStaIn). 
 - Tau PET data in Alzheimer's disease: [Vogel et al., 2021](https://doi.org/10.1038/s41591-021-01309-6)
