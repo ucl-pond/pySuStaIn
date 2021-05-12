@@ -351,7 +351,10 @@ class ZscoreSustain(AbstractSustain):
         samples_sequence[:, :, 0]           = seq_init  # don't need to copy as we don't write to 0 index
         samples_f[:, 0]                     = f_init
 
-        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations):
+        # Reduce frequency of tqdm update to 0.1% of total for larger iteration numbers
+        tqdm_update_iters = int(n_iterations/1000) if n_iterations > 100000 else None 
+
+        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if i > 0:
                 seq_order                   = np.random.permutation(N_S)  # this function returns different random numbers to Matlab
                 for s in seq_order:
