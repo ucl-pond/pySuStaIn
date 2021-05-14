@@ -233,7 +233,16 @@ def main():
             test_idxs.append(test)
         test_idxs              = np.array(test_idxs)
 
+        #For parallelization, you can call this several different ways
+        #passing in one or a specific set ofcross-validation folds:
+        #CVIC, loglike_matrix = sustain.cross_validate_sustain_model(test_idxs, 0)      #just the first fold
+        #CVIC, loglike_matrix = sustain.cross_validate_sustain_model(test_idxs, [0,5])  #first and sixth
+
+        #You can also just run all folds at once
         CVIC, loglike_matrix   = sustain.cross_validate_sustain_model(test_idxs)
+
+        if CVIC == [] and loglike_matrix == []:
+            return
 
         #output CV folds' out-of-sample log likelihoods
         df_loglike              = pd.DataFrame(data = loglike_matrix, columns = ["Subtype " + str(i+1) for i in range(N_S_max)])

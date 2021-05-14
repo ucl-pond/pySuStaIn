@@ -316,8 +316,8 @@ class AbstractSustain(ABC):
 
                     save_variables["mean_likelihood_subj_test"]         = mean_likelihood_subj_test
 
-                    pickle_file                 = open(pickle_filename_fold_s, 'wb')
-                    pickle_output               = pickle.dump(save_variables, pickle_file)
+                    pickle_file                     = open(pickle_filename_fold_s, 'wb')
+                    pickle_output                   = pickle.dump(save_variables, pickle_file)
                     pickle_file.close()
 
                 if is_full:
@@ -341,7 +341,7 @@ class AbstractSustain(ABC):
             pylab.savefig(Path(self.output_folder) / 'Log_likelihoods_cv_folds.png')
             pylab.show()
 
-        CVIC = np.zeros(self.N_S_max)
+        CVIC                            = np.zeros(self.N_S_max)
 
         for s in range(self.N_S_max):
             for fold in range(Nfolds):
@@ -349,7 +349,6 @@ class AbstractSustain(ABC):
                 pickle_filepath         = Path(pickle_filename_fold_s)
 
                 pickle_file             = open(pickle_filename_fold_s, 'rb')
-
                 loaded_variables        = pickle.load(pickle_file)
 
                 mean_likelihood_subj_test = loaded_variables["mean_likelihood_subj_test"]
@@ -360,7 +359,7 @@ class AbstractSustain(ABC):
                 else:
                     mean_likelihood_subj_test_cval    = np.concatenate((mean_likelihood_subj_test_cval, mean_likelihood_subj_test), axis=0)
 
-            CVIC[s] = -2*sum(np.log(mean_likelihood_subj_test_cval))
+            CVIC[s]                     = -2*sum(np.log(mean_likelihood_subj_test_cval))
 
         print("CVIC for each subtype model: " + str(CVIC))
 
