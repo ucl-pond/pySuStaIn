@@ -8,11 +8,10 @@ Installation
 In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and all subfolders), run:
 
 ```
-pip install -e ./awkde
 pip install  .
 ```
 
-This will install the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling), then the pySuStaIn package.
+This will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
 
 Troubleshooting
 ============
