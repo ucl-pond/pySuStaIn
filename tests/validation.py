@@ -5,8 +5,6 @@ import shutil
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 import pySuStaIn
 
