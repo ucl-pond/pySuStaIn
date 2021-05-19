@@ -8,13 +8,13 @@
 # For questions/comments related to: the SuStaIn algorithm
 # contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
-
+from tqdm import tqdm
 import numpy as np
 import scipy.stats as stats
 from matplotlib import pyplot as plt
 
-from  pySuStaIn.AbstractSustain import AbstractSustainData
-from  pySuStaIn.AbstractSustain import AbstractSustain
+from pySuStaIn.AbstractSustain import AbstractSustainData
+from pySuStaIn.AbstractSustain import AbstractSustain
 
 #*******************************************
 #The data structure class for MixtureSustain. It holds the positive/negative likelihoods that get passed around and re-indexed in places.
@@ -53,7 +53,8 @@ class MixtureSustain(AbstractSustain):
                  N_iterations_MCMC,
                  output_folder,
                  dataset_name,
-                 use_parallel_startpoints):
+                 use_parallel_startpoints,
+                 seed):
         # The initializer for the mixture model based events implementation of AbstractSustain
         # Parameters:
         #   L_yes                       - probability of positive class for all subjects across all biomarkers (from mixture modelling)
@@ -67,6 +68,7 @@ class MixtureSustain(AbstractSustain):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   seed                        - random number seed
 
         N                               =  L_yes.shape[1] # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -82,7 +84,8 @@ class MixtureSustain(AbstractSustain):
                          N_iterations_MCMC,
                          output_folder,
                          dataset_name,
-                         use_parallel_startpoints)
+                         use_parallel_startpoints,
+                         seed)
 
     def _initialise_sequence(self, sustainData):
         # Randomly initialises a sequence
@@ -123,21 +126,12 @@ class MixtureSustain(AbstractSustain):
         #**** THIS VERSION IS ROUGHLY 10x FASTER THAN THE ONE BELOW
         cp_yes                              = np.cumprod(sustainData.L_yes[:, S_int],        1)
         cp_no                               = np.cumprod(sustainData.L_no[:,  S_int[::-1]],  1)   #do the cumulative product from the end of the sequence
-        for i in arange_Np1:
 
-            if i == 0:
-                p_perm_k[:, i]              = 1 / (N + 1) * cp_no[:,N-1]
-            elif i == N:
-                p_perm_k[:, i]              = 1 / (N + 1) * cp_yes[:,N-1]
-            else:
-                p_perm_k[:, i]              = 1 / (N + 1) * cp_yes[:,i-1] * cp_no[:,N-i-1]
-
-        #**** STRAIGHTFORWARD VERSION - MUCH SLOWER
-        # for i in arange_Np1: #range(N+1):
-        #     occur                           = S_int[arange_Np1[0:i]]    #S_int[range(0, i, 1)] #S_int[0:(i - 1)]
-        #     notoccur                        = S_int[i:]
-        #
-        #     p_perm_k[:, i]                  = 1 / (N + 1) * np.prod(sustainData.L_yes[:, occur], 1) * np.prod(sustainData.L_no[:, notoccur], 1)
+        # Even faster version to avoid loops
+        p_perm_k[:, 0] = cp_no[:, -1]
+        p_perm_k[:, 1:-1] = cp_no[:, :-1][:, ::-1] * cp_yes[:, :-1]
+        p_perm_k[:, -1] = cp_yes[:, -1]
+        p_perm_k *= 1 / (N + 1)
 
         return p_perm_k
 
@@ -159,7 +153,8 @@ class MixtureSustain(AbstractSustain):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        # the second summation axis is different to Matlab version
+        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
@@ -197,7 +192,7 @@ class MixtureSustain(AbstractSustain):
                     p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
                     total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
                     total_prob_subj         = np.sum(total_prob_stage, 1)
-                    possible_likelihood[index] = sum(np.log(total_prob_subj + 1e-250))
+                    possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
                 possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
                 max_likelihood              = max(possible_likelihood)
@@ -220,7 +215,7 @@ class MixtureSustain(AbstractSustain):
         total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
-        likelihood_opt                      = sum(np.log(total_prob_subj + 1e-250))
+        likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
 
         return S_opt, f_opt, likelihood_opt
 
@@ -240,44 +235,37 @@ class MixtureSustain(AbstractSustain):
         samples_sequence[:, :, 0]           = seq_init  # don't need to copy as we don't write to 0 index
         samples_f[:, 0]                     = f_init
 
-        for i in range(n_iterations):
-            if i % (n_iterations / 10) == 0:
-                print('Iteration', i, 'of', n_iterations, ',', int(float(i) / float(n_iterations) * 100.), '% complete')
+        # Reduce frequency of tqdm update to 0.1% of total for larger iteration numbers
+        tqdm_update_iters = int(n_iterations/1000) if n_iterations > 100000 else None 
+
+        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if i > 0:
                 seq_order                   = MixtureSustain.randperm_local(N_S) #np.random.permutation(N_S)  # this function returns different random numbers to Matlab
-                for s in seq_order:
-                    move_event_from         = int(np.ceil(N * np.random.rand())) - 1
 
-                    current_sequence        = samples_sequence[s, :, i - 1]
+                # Abstract out seq_order loop
+                move_event_from = np.ceil(N * np.random.rand(len(seq_order))).astype(int) - 1
+                current_sequence = samples_sequence[seq_order, :, i - 1]
 
-                    current_location        = np.array([0] * N)
-                    current_location[current_sequence.astype(int)] = np.arange(N)
+                selected_event = current_sequence[np.arange(current_sequence.shape[0]), move_event_from]
 
-                    #select an event in the sequence to move
-                    selected_event          = int(current_sequence[move_event_from])
+                possible_positions = np.arange(N) + np.zeros((len(seq_order),1))
 
-                    possible_positions      = np.arange(N)
+                distance = np.arange(N) + np.zeros((len(seq_order),1)) - move_event_from[:, np.newaxis]
 
-                    distance                = possible_positions - move_event_from
+                weight = AbstractSustain.calc_coeff(seq_sigma) * AbstractSustain.calc_exp(distance, 0., seq_sigma)
+                weight = np.divide(weight, weight.sum(1)[:, None])
 
-                    if isinstance(seq_sigma, int):  # FIXME: change to float       ##if ((seq_sigma.shape[0]==1) + (seq_sigma.shape[1]==1)) == 2:
-                        this_seq_sigma      = seq_sigma
-                    else:
-                        this_seq_sigma      = seq_sigma[s, selected_event]
+                index = [np.random.choice(np.arange(len(row)), 1, replace=True, p=row)[0] for row in weight]
 
-                    # use own normal PDF because stats.norm is slow
-                    weight                  = AbstractSustain.calc_coeff(this_seq_sigma) * AbstractSustain.calc_exp(distance, 0., this_seq_sigma)
-                    weight                  /= np.sum(weight)
+                move_event_to = np.arange(N)[index]
 
-                    #TEMP: MATLAB comparison
-                    #index                   = 0
-                    index                   = np.random.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
+                r = current_sequence.shape[0]
+                # Don't need to copy, but doing it for clarity
+                new_seq = current_sequence.copy()
+                new_seq[np.arange(r), move_event_from] = new_seq[np.arange(r), move_event_to]
+                new_seq[np.arange(r), move_event_to] = selected_event
 
-                    move_event_to           = possible_positions[index]
-
-                    current_sequence        = np.delete(current_sequence, move_event_from, 0)
-                    new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
-                    samples_sequence[s, :, i] = new_sequence
+                samples_sequence[seq_order, :, i] = new_seq
 
                 new_f                       = samples_f[:, i - 1] + f_sigma * np.random.randn()
                 # TEMP: MATLAB comparison
@@ -302,7 +290,7 @@ class MixtureSustain(AbstractSustain):
             total_prob_stage                = np.sum(p_perm_k * f_val_mat, 2)
             total_prob_subj                 = np.sum(total_prob_stage, 1)
 
-            likelihood_sample               = sum(np.log(total_prob_subj + 1e-250))
+            likelihood_sample               = np.sum(np.log(total_prob_subj + 1e-250))
 
             samples_likelihood[i]           = likelihood_sample
 
@@ -313,9 +301,9 @@ class MixtureSustain(AbstractSustain):
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
 
-        perm_index                          = np.where(samples_likelihood == max(samples_likelihood))
+        perm_index                          = np.where(samples_likelihood == np.max(samples_likelihood))
         perm_index                          = perm_index[0][0]
-        ml_likelihood                       = max(samples_likelihood)
+        ml_likelihood                       = np.max(samples_likelihood)
         ml_sequence                         = samples_sequence[:, :, perm_index]
         ml_f                                = samples_f[:, perm_index]
 
@@ -356,6 +344,7 @@ class MixtureSustain(AbstractSustain):
             
         if plot_order is None:
             plot_order                      = samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
+
         biomarker_labels_plot_order         = [self.biomarker_labels[i].replace('_', ' ') for i in plot_order]
 
         for i in range(total_axes):        #for i in range(N_S):
@@ -437,9 +426,12 @@ class MixtureSustain(AbstractSustain):
         ml_subtype,         \
         prob_ml_subtype,    \
         ml_stage,           \
-        prob_ml_stage                   = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+        prob_ml_stage,      \
+        prob_subtype,       \
+        prob_stage,         \
+        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
 
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
     # ********************* STATIC METHODS
     @staticmethod
@@ -462,3 +454,118 @@ class MixtureSustain(AbstractSustain):
         #return np.arange(N)
 
         return np.random.permutation(N)
+
+    # ********************* TEST METHODS
+    @classmethod
+    def test_sustain(cls, n_biomarkers, n_samples, n_subtypes, ground_truth_subtypes, sustain_kwargs, seed=42, mixture_type="mixture_GMM"):
+        # Avoid import outside of testing
+        from mixture_model import fit_all_gmm_models, fit_all_kde_models
+        # Set a global seed to propagate (particularly for mixture_model)
+        np.random.seed(seed)
+
+        ground_truth_sequences = cls.generate_random_model(n_biomarkers, n_subtypes)
+
+        N_stages = n_biomarkers
+
+        ground_truth_stages_control = np.zeros((int(np.round(n_samples * 0.25)), 1))
+        ground_truth_stages_other = np.random.randint(1, N_stages+1, (int(np.round(n_samples * 0.75)), 1))
+        ground_truth_stages = np.vstack(
+            (ground_truth_stages_control, ground_truth_stages_other)
+        ).astype(int)
+
+        data, data_denoised = cls.generate_data(
+            ground_truth_subtypes,
+            ground_truth_stages,
+            ground_truth_sequences,
+            mixture_type
+        )
+        # choose which subjects will be cases and which will be controls
+        MIN_CASE_STAGE = np.round((n_biomarkers + 1) * 0.8)
+        index_case = np.where(ground_truth_stages >=  MIN_CASE_STAGE)[0]
+        index_control = np.where(ground_truth_stages ==  0)[0]
+
+        labels = 2 * np.ones(data.shape[0], dtype=int) # 2 - intermediate value, not used in mixture model fitting
+        labels[index_case] = 1                         # 1 - cases
+        labels[index_control] = 0                      # 0 - controls
+
+        data_case_control = data[labels != 2, :]
+        labels_case_control = labels[labels != 2]
+        if mixture_type == "mixture_GMM":
+            mixtures = fit_all_gmm_models(data, labels)
+        elif mixture_type == "mixture_KDE":
+            mixtures = fit_all_kde_models(data, labels)
+        
+        L_yes = np.zeros(data.shape)
+        L_no = np.zeros(data.shape)
+        for i in range(n_biomarkers):
+            if mixture_type == "mixture_GMM":
+                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(None, data[:, i])
+            elif mixture_type == "mixture_KDE":
+                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(data[:, i].reshape(-1, 1))
+
+        return cls(
+            L_yes, L_no,
+            **sustain_kwargs
+        )
+
+    # TODO: Refactor as Zscore func
+    def generate_random_model(N_biomarkers, N_S):
+        S                                   = np.zeros((N_S, N_biomarkers))
+        #try 30 times to find a unique sequence for each subtype
+        for i in range(30): 
+            matched_others                  = False
+            for s in range(N_S):
+                S[s, :]                     = np.random.permutation(N_biomarkers)
+                #compare to all previous sequences
+                for i in range(s):
+                    if np.all(S[s, :] == S[i, :]):
+                        matched_others      = True
+            #all subtype sequences are unique, so break
+            if not matched_others:
+                break
+        if matched_others:
+            print('WARNING: Iterated 30 times and could not find unique sequences for all subtypes.')
+        return S
+
+    # TODO: Refactor as Zscore func
+    def generate_data(subtypes, stages, gt_ordering, mixture_style):
+        N_biomarkers                        = gt_ordering.shape[1]
+        N_subjects                          = len(subtypes)
+        #controls are always drawn from N(0, 1) distribution
+        mean_controls                       = np.array([0]   * N_biomarkers)
+        std_controls                        = np.array([0.25] * N_biomarkers)
+        #mean and variance for cases
+        #if using mixture_GMM, use normal distribution with mean 1 and std. devs sampled from a range
+        if mixture_style == 'mixture_GMM':
+            mean_cases                      = np.array([1.5] * N_biomarkers)
+            std_cases                       = np.random.uniform(0.25, 0.50, N_biomarkers)
+        #if using mixture_KDE, use log normal with mean 0.5 and std devs sampled from a range
+        elif mixture_style == 'mixture_KDE':
+            mean_cases                      = np.array([0.5] * N_biomarkers)
+            std_cases                       = np.random.uniform(0.2, 0.5, N_biomarkers)
+
+        data                                = np.zeros((N_subjects, N_biomarkers))
+        data_denoised                       = np.zeros((N_subjects, N_biomarkers))
+
+        stages                              = stages.astype(int)
+        #loop over all subjects, creating measurment for each biomarker based on what subtype and stage they're in
+        for i in range(N_subjects):
+            S_i                             = gt_ordering[subtypes[i], :].astype(int)
+            stage_i                         = np.asscalar(stages[i])
+
+            #fill in with ABNORMAL values up to the subject's stage
+            for j in range(stage_i):
+
+                if      mixture_style == 'mixture_KDE':
+                    sample_j                = np.random.lognormal(mean_cases[S_i[j]], std_cases[S_i[j]])
+                elif    mixture_style == 'mixture_GMM':
+                    sample_j                = np.random.normal(mean_cases[S_i[j]], std_cases[S_i[j]])
+
+                data[i, S_i[j]]             = sample_j
+                data_denoised[i, S_i[j]]    = mean_cases[S_i[j]]
+
+            # fill in with NORMAL values from the subject's stage+1 to last stage
+            for j in range(stage_i, N_biomarkers):
+                data[i, S_i[j]]             = np.random.normal(mean_controls[S_i[j]], std_controls[S_i[j]])
+                data_denoised[i, S_i[j]]    = mean_controls[S_i[j]]
+        return data, data_denoised #, stage_value
