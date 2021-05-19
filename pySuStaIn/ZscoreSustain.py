@@ -52,7 +52,7 @@ class ZscoreSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed):
+                 seed=None):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
         #   data                        - !important! needs to be (positive) z-scores!

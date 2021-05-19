@@ -52,7 +52,7 @@ class OrdinalSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed):
+                 seed=None):
         # The initializer for the scored events model implementation of AbstractSustain
         # Parameters:
         #   prob_nl                     - probability of negative/normal class for all subjects across all biomarkers 

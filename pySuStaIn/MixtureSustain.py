@@ -54,7 +54,7 @@ class MixtureSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed):
+                 seed=None):
         # The initializer for the mixture model based events implementation of AbstractSustain
         # Parameters:
         #   L_yes                       - probability of positive class for all subjects across all biomarkers (from mixture modelling)

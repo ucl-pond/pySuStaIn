@@ -59,7 +59,7 @@ class AbstractSustain(ABC):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed):
+                 seed=None):
         # The initializer for the abstract class
         # Parameters:
         #   sustainData                 - an instance of an AbstractSustainData implementation
@@ -86,6 +86,11 @@ class AbstractSustain(ABC):
 
         if isinstance(seed, int):
             self.seed = seed
+        elif isinstance(seed, float):
+            self.seed = int(seed)
+        elif seed is None:
+            # Select random seed if none given
+            self.seed = np.random.default_rng().integers(1e10)
 
         self.use_parallel_startpoints   = use_parallel_startpoints
 
