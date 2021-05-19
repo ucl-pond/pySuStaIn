@@ -5,6 +5,12 @@ pySuStaIn
 
 Installation
 ============
+## Install option 1: direct install from repository
+```
+pip install git+https://github.com/ucl-pond/pySuStaIn
+```
+
+## Install option 2: clone repository, install locally (deprecated)
 In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and all subfolders), run:
 
 ```
