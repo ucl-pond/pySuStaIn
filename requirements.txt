@@ -6,6 +6,6 @@ pathos
 sklearn
 pandas
 pybind11
-awkde @ git+https://github.com/noxtoby/awkde.git#egg=awkde
-kde_ebm @ git+https://github.com/ucl-pond/kde_ebm.git#egg=kde_ebm
+awkde @ git+https://github.com/noxtoby/awkde.git
+kde_ebm @ git+https://github.com/ucl-pond/kde_ebm.git
 tqdm
