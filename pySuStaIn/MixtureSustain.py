@@ -459,7 +459,7 @@ class MixtureSustain(AbstractSustain):
     @classmethod
     def test_sustain(cls, n_biomarkers, n_samples, n_subtypes, ground_truth_subtypes, sustain_kwargs, seed=42, mixture_type="mixture_GMM"):
         # Avoid import outside of testing
-        from mixture_model import fit_all_gmm_models, fit_all_kde_models
+        from kde_ebm.mixture_model import fit_all_gmm_models, fit_all_kde_models #from mixture_model import fit_all_gmm_models, fit_all_kde_models
         # Set a global seed to propagate (particularly for mixture_model)
         np.random.seed(seed)
 
