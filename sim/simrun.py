@@ -14,7 +14,7 @@ import pandas as pd
 from simfuncs import *
 
 from kde_ebm.mixture_model import fit_all_gmm_models, fit_all_kde_models
-import kde_ebm.plotting as plotting
+from kde_ebm import plotting
 
 import warnings
 warnings.filterwarnings("ignore",category=cbook.mplDeprecation)
