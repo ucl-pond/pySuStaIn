@@ -26,7 +26,7 @@ setup(name=					'pySuStaIn',
       maintainer=			'Leon Aksman',
       maintainer_email=		'l.aksman@ucl.ac.uk',
       license=				'TBC',
-      packages=				['pySuStaIn', 'mixture_model', 'plotting', 'sim'],
+      packages=				['pySuStaIn', 'sim'],
       python_requires= 		'>=3.7',
       install_requires = 	install_reqs,	#the parsed requirements from requirements.txt
       entry_points=			{},

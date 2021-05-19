@@ -5,5 +5,7 @@ matplotlib>=3.0.0
 pathos
 sklearn
 pandas
-awkde @ git+https://github.com/mennthor/awkde.git#egg=awkde
+pybind11
+awkde @ git+https://github.com/noxtoby/awkde.git#egg=awkde
+kde_ebm @ git+https://github.com/ucl-pond/kde_ebm.git#egg=kde_ebm
 tqdm
