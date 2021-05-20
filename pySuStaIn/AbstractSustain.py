@@ -92,6 +92,9 @@ class AbstractSustain(ABC):
             # Select random seed if none given
             self.seed = np.random.default_rng().integers(1e10)
 
+        # Create global rng to create process-specific rngs
+        self.global_rng = np.random.default_rng(self.seed)
+
         self.use_parallel_startpoints   = use_parallel_startpoints
 
         if self.use_parallel_startpoints:
@@ -644,7 +647,8 @@ class AbstractSustain(ABC):
         # ml_likelihood - the likelihood of the most probable SuStaIn model
 
         partial_iter                        = partial(self._find_ml_iteration, sustainData)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
+        seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
+        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -665,14 +669,14 @@ class AbstractSustain(ABC):
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-    def _find_ml_iteration(self, sustainData, seed_num):
+    def _find_ml_iteration(self, sustainData, seed_seq):
         #Convenience sub-function for above
 
-        # if self.use_parallel_startpoints:
-        np.random.seed(seed_num)
+        # Get process-appropriate Generator
+        rng = np.random.default_rng(seed_seq)
 
         # randomly initialise the sequence of the linear z-score model
-        seq_init                        = self._initialise_sequence(sustainData)
+        seq_init                        = self._initialise_sequence(sustainData, rng)
         f_init                          = [1]
 
         this_ml_sequence,   \
@@ -680,7 +684,7 @@ class AbstractSustain(ABC):
         this_ml_likelihood, \
         _,                  \
         _,                  \
-        _                               = self._perform_em(sustainData, seq_init, f_init)
+        _                               = self._perform_em(sustainData, seq_init, f_init, rng)
 
         return this_ml_sequence, this_ml_f, this_ml_likelihood
 
@@ -698,7 +702,8 @@ class AbstractSustain(ABC):
         N_S                                 = 2
 
         partial_iter                        = partial(self._find_ml_split_iteration, sustainData)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
+        seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
+        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -720,18 +725,19 @@ class AbstractSustain(ABC):
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-    def _find_ml_split_iteration(self, sustainData, seed_num):
+    def _find_ml_split_iteration(self, sustainData, seed_seq):
         #Convenience sub-function for above
 
-        # if self.use_parallel_startpoints:
-        np.random.seed(seed_num)
+        # Get process-appropriate Generator
+        rng = np.random.default_rng(seed_seq)
 
         N_S                                 = 2
 
         # randomly initialise individuals as belonging to one of the two subtypes (clusters)
         min_N_cluster                       = 0
         while min_N_cluster == 0:
-            cluster_assignment = np.ceil(N_S * np.random.rand(sustainData.getNumSamples())).astype(int)
+            vals = rng.random(sustainData.getNumSamples())
+            cluster_assignment = np.ceil(N_S * vals).astype(int)
             # Count cluster sizes
             # Guarantee 1s and 2s counts with minlength=3
             # Ignore 0s count with [1:]
@@ -745,15 +751,15 @@ class AbstractSustain(ABC):
             index_s                         = cluster_assignment.reshape(cluster_assignment.shape[0], ) == (s + 1)
             temp_sustainData                = sustainData.reindex(index_s)
 
-            temp_seq_init                   = self._initialise_sequence(sustainData)
-            seq_init[s, :], _, _, _, _, _   = self._perform_em(temp_sustainData, temp_seq_init, [1])
+            temp_seq_init                   = self._initialise_sequence(sustainData, rng)
+            seq_init[s, :], _, _, _, _, _   = self._perform_em(temp_sustainData, temp_seq_init, [1], rng)
 
         f_init                              = np.array([1.] * N_S) / float(N_S)
 
         # optimise the mixture of two models from the initialisation
         this_ml_sequence, \
         this_ml_f, \
-        this_ml_likelihood, _, _, _         = self._perform_em(sustainData, seq_init, f_init)
+        this_ml_likelihood, _, _, _         = self._perform_em(sustainData, seq_init, f_init, rng)
 
         return this_ml_sequence, this_ml_f, this_ml_likelihood
 
@@ -770,7 +776,8 @@ class AbstractSustain(ABC):
         N_S                                 = seq_init.shape[0]
 
         partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
-        pool_output_list                    = self.pool.map(partial_iter, range(self.seed, self.seed+self.N_startpoints))
+        seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
+        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -793,23 +800,23 @@ class AbstractSustain(ABC):
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
 
-    def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_num):
+    def _find_ml_mixture_iteration(self, sustainData, seq_init, f_init, seed_seq):
         #Convenience sub-function for above
 
-        # if self.use_parallel_startpoints:
-        np.random.seed(seed_num)
+        # Get process-appropriate Generator
+        rng = np.random.default_rng(seed_seq)
 
         ml_sequence,        \
         ml_f,               \
         ml_likelihood,      \
         samples_sequence,   \
         samples_f,          \
-        samples_likelihood                  = self._perform_em(sustainData, seq_init, f_init)
+        samples_likelihood                  = self._perform_em(sustainData, seq_init, f_init, rng)
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
     #********************************************
 
-    def _perform_em(self, sustainData, current_sequence, current_f):
+    def _perform_em(self, sustainData, current_sequence, current_f, rng):
 
         # Perform an E-M procedure to estimate parameters of SuStaIn model
         MaxIter                             = 100
@@ -832,7 +839,7 @@ class AbstractSustain(ABC):
 
             candidate_sequence,     \
             candidate_f,            \
-            candidate_likelihood            = self._optimise_parameters(sustainData, current_sequence, current_f)
+            candidate_likelihood            = self._optimise_parameters(sustainData, current_sequence, current_f, rng)
 
             HAS_converged                   = np.fabs((candidate_likelihood - current_likelihood) / max(candidate_likelihood, current_likelihood)) < 1e-6
             if HAS_converged:
@@ -988,7 +995,7 @@ class AbstractSustain(ABC):
 
     # ********************* ABSTRACT METHODS
     @abstractmethod
-    def _initialise_sequence(self, sustainData):
+    def _initialise_sequence(self, sustainData, rng):
         pass
 
     @abstractmethod
@@ -996,7 +1003,7 @@ class AbstractSustain(ABC):
         pass
 
     @abstractmethod
-    def _optimise_parameters(self, sustainData, S_init, f_init):
+    def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         pass
 
     @abstractmethod
