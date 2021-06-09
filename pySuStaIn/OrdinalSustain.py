@@ -114,7 +114,7 @@ class OrdinalSustain(AbstractSustain):
                          seed)
 
 
-    def _initialise_sequence(self, sustainData):
+    def _initialise_sequence(self, sustainData, rng):
         # Randomly initialises a linear z-score model ensuring that the biomarkers
         # are monotonically increasing
         #
@@ -147,7 +147,7 @@ class OrdinalSustain(AbstractSustain):
 
             events                          = np.array(range(N))
             possible_events                 = np.array(events[IS_min_stage_score])
-            this_index                      = np.ceil(np.random.rand() * ((len(possible_events)))) - 1
+            this_index                      = np.ceil(rng.random() * ((len(possible_events)))) - 1
             S[i]                            = possible_events[int(this_index)]
 
         S                                   = S.reshape(1, len(S))
@@ -186,7 +186,7 @@ class OrdinalSustain(AbstractSustain):
 
         return p_perm_k
 
-    def _optimise_parameters(self, sustainData, S_init, f_init):
+    def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         # Optimise the parameters of the SuStaIn model
 
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
@@ -207,10 +207,10 @@ class OrdinalSustain(AbstractSustain):
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
-        order_seq                           = np.random.permutation(N_S)  # this will produce different random numbers to Matlab
+        order_seq                           = rng.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
-            order_bio                       = np.random.permutation(N)  # this will produce different random numbers to Matlab
+            order_bio                       = rng.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence            = S_opt[s]
                 current_location            = np.array([0] * len(current_sequence))
@@ -311,9 +311,9 @@ class OrdinalSustain(AbstractSustain):
 
         for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if i > 0:
-                seq_order                   = np.random.permutation(N_S)  # this function returns different random numbers to Matlab
+                seq_order                   = self.global_rng.permutation(N_S)  # this function returns different random numbers to Matlab
                 for s in seq_order:
-                    move_event_from         = int(np.ceil(N * np.random.rand())) - 1
+                    move_event_from         = int(np.ceil(N * self.global_rng.random())) - 1
                     current_sequence        = samples_sequence[s, :, i - 1]
 
                     current_location        = np.array([0] * N)
@@ -358,7 +358,7 @@ class OrdinalSustain(AbstractSustain):
                     # use own normal PDF because stats.norm is slow
                     weight                  = AbstractSustain.calc_coeff(this_seq_sigma) * AbstractSustain.calc_exp(distance, 0., this_seq_sigma)
                     weight                  /= np.sum(weight)
-                    index                   = np.random.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
+                    index                   = self.global_rng.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
 
                     move_event_to           = possible_positions[index]
 
@@ -366,7 +366,7 @@ class OrdinalSustain(AbstractSustain):
                     new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
                     samples_sequence[s, :, i] = new_sequence
 
-                new_f                       = samples_f[:, i - 1] + f_sigma * np.random.randn()
+                new_f                       = samples_f[:, i - 1] + f_sigma * self.global_rng.standard_normal()
                 new_f                       = (np.fabs(new_f) / np.sum(np.fabs(new_f)))
                 samples_f[:, i]             = new_f
 
@@ -377,7 +377,7 @@ class OrdinalSustain(AbstractSustain):
 
             if i > 0:
                 ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
-                if ratio < np.random.rand():
+                if ratio < self.global_rng.random():
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]

@@ -87,10 +87,10 @@ class MixtureSustain(AbstractSustain):
                          use_parallel_startpoints,
                          seed)
 
-    def _initialise_sequence(self, sustainData):
+    def _initialise_sequence(self, sustainData, rng):
         # Randomly initialises a sequence
 
-        S                                   = MixtureSustain.randperm_local(sustainData.getNumStages()) #np.random.permutation(sustainData.getNumStages())
+        S                                   = rng.permutation(sustainData.getNumStages()) #np.random.permutation(sustainData.getNumStages())
         S                                   = S.reshape(1, len(S))
         return S
 
@@ -136,7 +136,7 @@ class MixtureSustain(AbstractSustain):
         return p_perm_k
 
 
-    def _optimise_parameters(self, sustainData, S_init, f_init):
+    def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         # Optimise the parameters of the SuStaIn model
 
         M                                   = sustainData.getNumSamples()
@@ -158,10 +158,10 @@ class MixtureSustain(AbstractSustain):
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
-        order_seq                           = MixtureSustain.randperm_local(N_S)    #np.random.permutation(N_S)  # this will produce different random numbers to Matlab
+        order_seq                           = rng.permutation(N_S)    #np.random.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
-            order_bio                       = MixtureSustain.randperm_local(N) #np.random.permutation(N)  # this will produce different random numbers to Matlab
+            order_bio                       = rng.permutation(N) #np.random.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence            = S_opt[s]
                 assert(len(current_sequence)==N)
@@ -240,10 +240,11 @@ class MixtureSustain(AbstractSustain):
 
         for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if i > 0:
-                seq_order                   = MixtureSustain.randperm_local(N_S) #np.random.permutation(N_S)  # this function returns different random numbers to Matlab
+                seq_order                   = self.global_rng.permutation(N_S)
+                # this function returns different random numbers to Matlab
 
                 # Abstract out seq_order loop
-                move_event_from = np.ceil(N * np.random.rand(len(seq_order))).astype(int) - 1
+                move_event_from = np.ceil(N * self.global_rng.random(len(seq_order))).astype(int) - 1
                 current_sequence = samples_sequence[seq_order, :, i - 1]
 
                 selected_event = current_sequence[np.arange(current_sequence.shape[0]), move_event_from]
@@ -255,7 +256,7 @@ class MixtureSustain(AbstractSustain):
                 weight = AbstractSustain.calc_coeff(seq_sigma) * AbstractSustain.calc_exp(distance, 0., seq_sigma)
                 weight = np.divide(weight, weight.sum(1)[:, None])
 
-                index = [np.random.choice(np.arange(len(row)), 1, replace=True, p=row)[0] for row in weight]
+                index = [self.global_rng.choice(np.arange(len(row)), 1, replace=True, p=row)[0] for row in weight]
 
                 move_event_to = np.arange(N)[index]
 
@@ -267,7 +268,7 @@ class MixtureSustain(AbstractSustain):
 
                 samples_sequence[seq_order, :, i] = new_seq
 
-                new_f                       = samples_f[:, i - 1] + f_sigma * np.random.randn()
+                new_f                       = samples_f[:, i - 1] + f_sigma * self.global_rng.standard_normal()
                 # TEMP: MATLAB comparison
                 #new_f                       = samples_f[:, i - 1] + f_sigma * stats.norm.ppf(np.random.rand(1,N_S))
 
@@ -296,7 +297,7 @@ class MixtureSustain(AbstractSustain):
 
             if i > 0:
                 ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
-                if ratio < np.random.rand():
+                if ratio < self.global_rng.random():
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
@@ -446,14 +447,6 @@ class MixtureSustain(AbstractSustain):
     def calc_exp(x, mu, sig):
         x = (x - mu) / sig
         return np.exp(-.5 * x * x)
-
-    @staticmethod
-    def randperm_local(N):
-
-        # TEMP: MATLAB comparison
-        #return np.arange(N)
-
-        return np.random.permutation(N)
 
     # ********************* TEST METHODS
     @classmethod
