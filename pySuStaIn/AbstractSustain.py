@@ -90,7 +90,7 @@ class AbstractSustain(ABC):
             self.seed = int(seed)
         elif seed is None:
             # Select random seed if none given
-            self.seed = np.random.default_rng().integers(1e10)
+            self.seed = np.random.default_rng().integers((2**32)-1)
 
         self.use_parallel_startpoints   = use_parallel_startpoints
 
