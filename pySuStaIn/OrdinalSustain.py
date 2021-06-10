@@ -390,21 +390,26 @@ class OrdinalSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=8):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=8):
+
+        if subtype_order is None:
+            subtype_order                   = self._plot_subtype_order
+
+        #biomarker_order currently unused here
 
         colour_mat                          = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]]) #, [0.5, 0, 1], [0, 1, 1]])
 
         temp_mean_f                         = np.mean(samples_f, 1)
         vals                                = np.sort(temp_mean_f)[::-1]
         vals                                = np.array([np.round(x * 100.) for x in vals]) / 100.
-        ix                                  = np.argsort(temp_mean_f)[::-1]
+        #ix                                  = np.argsort(temp_mean_f)[::-1]
 
         N_S                                 = samples_sequence.shape[0]
         N_bio                               = len(self.biomarker_labels)
 
         if N_S == 1:
             fig, ax                         = plt.subplots()
-            total_axes                      = 1;
+            total_axes                      = 1
         elif N_S < 3:
             fig, ax                         = plt.subplots(1, N_S)
             total_axes                      = N_S
@@ -422,7 +427,7 @@ class OrdinalSustain(AbstractSustain):
                 ax.flat[i].set_axis_off()
                 continue
 
-            this_samples_sequence           = samples_sequence[ix[i],:,:].T
+            this_samples_sequence           = samples_sequence[subtype_order[i],:,:].T
             markers                         = np.unique(self.stage_biomarker_index)
             N                               = this_samples_sequence.shape[1]
 

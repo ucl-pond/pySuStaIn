@@ -203,6 +203,11 @@ class AbstractSustain(ABC):
 
             n_samples                       = self.__sustainData.getNumSamples() #self.__data.shape[0]
 
+            #order of subtypes displayed in positional variance diagrams plotted by _plot_sustain_model
+            self._plot_subtype_order        = np.argsort(ml_f_EM)[::-1]
+            #order of biomarkers in each subtypes' positional variance diagram
+            self._plot_biomarker_order      = ml_sequence_EM[self._plot_subtype_order[0], :].astype(int)
+
             # plot results
             if plot:
                 fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
@@ -394,10 +399,11 @@ class AbstractSustain(ABC):
         ml_sequence_EM_full                 = loaded_variables_full["ml_sequence_EM"]
         ml_f_EM_full                        = loaded_variables_full["ml_f_EM"]
 
+        #REMOVED SO THAT PLOT_SUBTYPE_ORDER WORKS THE SAME HERE AS IN run_sustain_algorithm
         #re-index so that subtypes are in descending order by fraction of subjects
-        index_EM_sort                       = np.argsort(ml_f_EM_full)[::-1]
-        ml_sequence_EM_full                 = ml_sequence_EM_full[index_EM_sort,:]
-        ml_f_EM_full                        = ml_f_EM_full[index_EM_sort]
+        # index_EM_sort                       = np.argsort(ml_f_EM_full)[::-1]
+        # ml_sequence_EM_full                 = ml_sequence_EM_full[index_EM_sort,:]
+        # ml_f_EM_full                        = ml_f_EM_full[index_EM_sort]
 
         for i in range(N_folds):
 
@@ -456,8 +462,15 @@ class AbstractSustain(ABC):
                 samples_f_cval              = np.concatenate((samples_f_cval,           samples_f_i[iMax_vec,:]),           axis=1)
 
         n_samples                           = self.__sustainData.getNumSamples()
-        plot_order                          = ml_sequence_EM_full[0,:].astype(int)
-        fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True, plot_order=plot_order, title_font_size=12)
+
+        #ADDED HERE BECAUSE THIS MAY BE CALLED BY CALLED FOR A RANGE OF N_S_max, AS IN simrun.py
+        # order of subtypes displayed in positional variance diagrams plotted by _plot_sustain_model
+        plot_subtype_order                  = np.argsort(ml_f_EM_full)[::-1]
+        # order of biomarkers in each subtypes' positional variance diagram
+        plot_biomarker_order                = ml_sequence_EM_full[plot_subtype_order[0], :].astype(int)
+
+        fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True,
+                                                                       subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12)
 
         # save and show this figure after all subtypes have been calculcated
         png_filename                        = Path(self.output_folder) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.png"
@@ -1011,7 +1024,7 @@ class AbstractSustain(ABC):
         pass
 
     @abstractmethod
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=10):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=10):
         pass
 
     @abstractmethod

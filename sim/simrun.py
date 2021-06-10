@@ -100,7 +100,7 @@ def main():
         elif sustainType == "mixture_KDE":
             mixtures            = fit_all_kde_models(data, labels)
 
-        fig, ax                 = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels, plotting_font_size=20)
+        fig, ax                 = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels)#, plotting_font_size=20)
         fig.show()
         fig.savefig(os.path.join(output_folder, 'kde_fits.png'))
 
@@ -161,7 +161,11 @@ def main():
     ground_truth_fractions_actual       = np.expand_dims(ground_truth_fractions_actual, axis=1)
     ground_truth_nsamples               = np.inf
 
-    fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, title_font_size=12)
+    plot_subtype_order      = np.arange(N_S_ground_truth)
+    plot_biomarker_order    = ground_truth_sequences[plot_subtype_order[0], :].astype(int).ravel()
+    fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, \
+                                                          subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12)
+    plt.suptitle('Ground truth sequences')
     fig.savefig(os.path.join(output_folder, 'PVD_true.png'))
     fig.show()
 
@@ -172,7 +176,7 @@ def main():
     prob_ml_subtype,    \
     ml_stage,           \
     prob_ml_stage,      \
-    prob_subtype_stage      = sustain.run_sustain_algorithm()
+    prob_subtype_stage      = sustain.run_sustain_algorithm(plot=True)
 
     #save the most likely subtype, the associated subtype probability,
     # the most likely stage and the associated stage probability for each subject
@@ -192,7 +196,7 @@ def main():
     X_hist                  = list()
     labels_hist             = list()
     for i in range(N_S_max):
-        X_hist.append(ml_subtype[ground_truth_subtypes==i])
+        X_hist.append(ml_subtype[ground_truth_subtypes==i].ravel())
         labels_hist.append('Subtype ' + str(i+1))
     plt.hist(X_hist, bins, label=labels_hist)
     plt.xticks(np.arange(0, N_S_ground_truth)+0.5, np.arange(1, N_S_ground_truth+1))

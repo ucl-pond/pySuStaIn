@@ -310,12 +310,20 @@ class MixtureSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=10):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=10):
 
         temp_mean_f                         = np.mean(samples_f, 1)
         vals                                = np.sort(temp_mean_f)[::-1]
         vals                                = np.array([np.round(x * 100.) for x in vals]) / 100.
-        ix                                  = np.argsort(temp_mean_f)[::-1]
+        # ix                                  = np.argsort(temp_mean_f)[::-1]
+
+        if subtype_order is None:
+            subtype_order                   = self._plot_subtype_order
+
+        if biomarker_order is None:
+            biomarker_order                 = self._plot_biomarker_order #samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
+
+        biomarker_labels_plot_order         = [self.biomarker_labels[i].replace('_', ' ') for i in biomarker_order]
 
 
         N_S                                 = samples_sequence.shape[0]
@@ -326,13 +334,9 @@ class MixtureSustain(AbstractSustain):
         
         confus_matrix_plotting              = np.zeros((N_stages, N_stages, N_S))
 
-#         if N_S > 1:
-#             fig, ax                         = plt.subplots(1, N_S)
-#         else:
-#             fig, ax                         = plt.subplots()
         if N_S == 1:
             fig, ax                         = plt.subplots()
-            total_axes                      = 1;
+            total_axes                      = 1
         elif N_S < 3:
             fig, ax                         = plt.subplots(1, N_S)
             total_axes                      = N_S
@@ -342,11 +346,6 @@ class MixtureSustain(AbstractSustain):
         else:
             fig, ax                         = plt.subplots(3, int(np.ceil(N_S / 3)))
             total_axes                      = 3 * int(np.ceil(N_S / 3))
-            
-        if plot_order is None:
-            plot_order                      = samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
-
-        biomarker_labels_plot_order         = [self.biomarker_labels[i].replace('_', ' ') for i in plot_order]
 
         for i in range(total_axes):        #for i in range(N_S):
 
@@ -354,7 +353,7 @@ class MixtureSustain(AbstractSustain):
                 ax.flat[i].set_axis_off()
                 continue
 
-            this_samples_sequence           = samples_sequence[ix[i],:,:].T
+            this_samples_sequence           = samples_sequence[subtype_order[i],:,:].T
 		        	
             N                               = this_samples_sequence.shape[1]
 
@@ -363,9 +362,7 @@ class MixtureSustain(AbstractSustain):
                 confus_matrix[j, :]         = sum(this_samples_sequence == j)
             confus_matrix                   /= N_MCMC_samples #float(max(this_samples_sequence.shape))
 
-            out_mat_i                       = np.tile(1 - confus_matrix[plot_order,:].reshape(N, N, 1), (1,1,3))
-
-            #this_colour_matrix[:, :, alter_level] = np.tile(this_confus_matrix[markers, :].reshape(N_bio, N, 1), (1, 1, sum(alter_level)))
+            out_mat_i                       = np.tile(1 - confus_matrix[biomarker_order,:].reshape(N, N, 1), (1,1,3))
 
             TITLE_FONT_SIZE                 = title_font_size
             X_FONT_SIZE                     = 10 #8
