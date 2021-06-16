@@ -3,6 +3,20 @@ pySuStaIn
 
 **Su**btype and **St**age **In**ference, or SuStaIn, is an algorithm for discovery of data-driven groups or "subtypes" in chronic disorders. This repository is the Python implementation of SuStaIn, with the option to describe the subtype progression patterns using either the event-based model or the piecewise linear z-score model.
 
+Acknowledgement
+================
+If you use SuStaIn, please cite the following core papers:
+1. [The original SuStaIn paper](https://doi.org/10.1038/s41467-018-05892-0)
+2. [The pySuStaIn software paper](https://doi.org/10.1101/2021.06.09.447713)
+
+Please also cite the corresponding progression pattern model you use:
+1. [The piecewise linear z-score model (i.e. ZscoreSustain)](https://doi.org/10.1038/s41467-018-05892-0)
+2. [The event-based model (i.e. MixtureSustain)](https://doi.org/10.1016/j.neuroimage.2012.01.062) 
+   with [Gaussian mixture modelling](https://doi.org/10.1093/brain/awu176) 
+   or [kernel density estimation](https://doi.org/10.1002/alz.12083)).
+   
+Thanks a lot for supporting this project.
+
 Installation
 ============
 ## Install option 1: direct install from repository
@@ -31,19 +45,6 @@ conda activate sustain_env
 To create an environment named `sustain_env`.
 
 
-Acknowledgement
-================
-If you use SuStaIn, please cite the following core papers:
-1. [The original SuStaIn paper](https://doi.org/10.1038/s41467-018-05892-0)
-2. [The pySuStaIn software paper]()
-
-Please also cite the corresponding progression pattern model you use:
-1. [The piecewise linear z-score model (i.e. ZscoreSustain)](https://doi.org/10.1038/s41467-018-05892-0)
-2. [The event-based model (i.e. MixtureSustain)](https://doi.org/10.1016/j.neuroimage.2012.01.062) 
-   with [Gaussian mixture modelling](https://doi.org/10.1093/brain/awu176) 
-   or [kernel density estimation](https://doi.org/10.1002/alz.12083)).
-   
-Thanks a lot for supporting this project.
 
 Dependencies
 ============
