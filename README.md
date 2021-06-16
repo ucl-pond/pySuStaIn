@@ -30,17 +30,20 @@ conda activate sustain_env
 
 To create an environment named `sustain_env`.
 
-Papers
-============
-Methods:
-- The SuStaIn algorithm: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
-- The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176) or non-parametric kernel density estimation [Firth et al. 2020](https://doi.org/10.1002/alz.12083))
-- The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
 
-Applications:
-- Multiple sclerosis (predicting treatment response): [Eshaghi et al. 2021](https://doi.org/10.1038/s41467-021-22265-2). The trained model is available [here](https://github.com/armaneshaghi/trained_models_MS_SuStaIn). 
-- Tau PET data in Alzheimer's disease: [Vogel et al. 2021](https://doi.org/10.1038/s41591-021-01309-6)
-- COPD: [Young and Bragman et al. 2020](https://doi.org/10.1164/rccm.201908-1600OC)
+Acknowledgement
+================
+If you use SuStaIn, please cite the following core papers:
+1. [The original SuStaIn paper](https://doi.org/10.1038/s41467-018-05892-0)
+2. [The pySuStaIn software paper]()
+
+Please also cite the corresponding progression pattern model you use:
+1. [The piecewise linear z-score model (i.e. ZscoreSustain)](https://doi.org/10.1038/s41467-018-05892-0)
+2. [The event-based model (i.e. MixtureSustain)](https://doi.org/10.1016/j.neuroimage.2012.01.062) 
+   with [Gaussian mixture modelling](https://doi.org/10.1093/brain/awu176) 
+   or [kernel density estimation](https://doi.org/10.1002/alz.12083)).
+   
+Thanks a lot for supporting this project.
 
 Dependencies
 ============
@@ -70,9 +73,19 @@ SuStaIn Tutorial
 ===============  
 See the jupyter notebook in the notebooks folder for a tutorial on how to use SuStaIn using simulated data.
 
-Acknowledgement
-================
-If you use SuStaIn, please cite [the SuStaIn algorithm](https://doi.org/10.1038/s41467-018-05892-0) as well as the corresponding progression pattern model you use, e.g. [piecewise linear z-score model](https://doi.org/10.1038/s41467-018-05892-0), [event-based model](https://doi.org/10.1016/j.neuroimage.2012.01.062) (with [gaussian mixture modelling](https://doi.org/10.1093/brain/awu176) or [kernel density estimation](https://doi.org/10.1002/alz.12083)).
+Papers
+============
+Methods:
+- The SuStaIn algorithm: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
+- The pySuStaIn software paper: [Aksman, Wijeratne et al. 2021](https://doi.org/10.1101/2021.06.09.447713)
+- The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176) or non-parametric kernel density estimation [Firth et al. 2020](https://doi.org/10.1002/alz.12083))
+- The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
+
+
+Applications:
+- Multiple sclerosis (predicting treatment response): [Eshaghi et al. 2021](https://doi.org/10.1038/s41467-021-22265-2). The trained model is available [here](https://github.com/armaneshaghi/trained_models_MS_SuStaIn). 
+- Tau PET data in Alzheimer's disease: [Vogel et al. 2021](https://doi.org/10.1038/s41591-021-01309-6)
+- COPD: [Young and Bragman et al. 2020](https://doi.org/10.1164/rccm.201908-1600OC)
 
 Funding
 ================
