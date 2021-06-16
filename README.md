@@ -5,7 +5,7 @@ pySuStaIn
 
 Acknowledgement
 ================
-If you use SuStaIn, please cite the following core papers:
+If you use pySuStaIn, please cite the following core papers:
 1. [The original SuStaIn paper](https://doi.org/10.1038/s41467-018-05892-0)
 2. [The pySuStaIn software paper](https://doi.org/10.1101/2021.06.09.447713)
 
