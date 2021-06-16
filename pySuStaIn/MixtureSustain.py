@@ -1,12 +1,21 @@
 ###
-# pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
-# Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (l.aksman@ucl.ac.uk)
-# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
+# pySuStaIn: a Python implementation of the Subtype and Stage Inference (SuStaIn) algorithm
 #
-# For questions/comments related to: object orient implementation of pySustain
-# contact: Leon Aksman (l.aksman@ucl.ac.uk)
-# For questions/comments related to: the SuStaIn algorithm
-# contact: Alex Young (alexandra.young@kcl.ac.uk)
+# If you use pySuStaIn, please cite the following core papers:
+# 1. The original SuStaIn paper:    https://doi.org/10.1038/s41467-018-05892-0
+# 2. The pySuStaIn software paper:  https://doi.org/10.1101/2021.06.09.447713
+#
+# Please also cite the corresponding progression pattern model you use:
+# 1. The piece-wise linear z-score model (i.e. ZscoreSustain):  https://doi.org/10.1038/s41467-018-05892-0
+# 2. The event-based model (i.e. MixtureSustain):               https://doi.org/10.1016/j.neuroimage.2012.01.062
+#    with Gaussian mixture modeling (i.e. 'mixture_gmm'):       https://doi.org/10.1093/brain/awu176
+#    or kernel density estimation (i.e. 'mixture_kde'):         https://doi.org/10.1002/alz.12083
+# 3. The model for discrete ordinal data (i.e. OrdinalSustain): TBD
+#
+# Thanks a lot for supporting this project.
+#
+# Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
 from tqdm import tqdm
 import numpy as np
