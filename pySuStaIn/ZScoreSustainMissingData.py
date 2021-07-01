@@ -8,7 +8,7 @@
 # For questions/comments related to: the SuStaIn algorithm
 # contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.stats import norm

@@ -17,7 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
 
