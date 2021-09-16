@@ -14,6 +14,7 @@ Please also cite the corresponding progression pattern model you use:
 2. [The event-based model (i.e. MixtureSustain)](https://doi.org/10.1016/j.neuroimage.2012.01.062) 
    with [Gaussian mixture modelling](https://doi.org/10.1093/brain/awu176) 
    or [kernel density estimation](https://doi.org/10.1002/alz.12083)).
+3. [The scored events model (i.e. OrdinalSustain)](https://doi.org/10.3389/frai.2021.613261)   
    
 Thanks a lot for supporting this project.
 
@@ -81,6 +82,7 @@ Methods:
 - The pySuStaIn software paper: [Aksman, Wijeratne et al. 2021](https://doi.org/10.1101/2021.06.09.447713)
 - The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176) or non-parametric kernel density estimation [Firth et al. 2020](https://doi.org/10.1002/alz.12083))
 - The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
+- The scored events model ('Ordinal SuStaIn'): [Young et al. 2021](https://doi.org/10.3389/frai.2021.613261)  
 
 
 Applications:
