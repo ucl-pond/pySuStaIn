@@ -3,7 +3,7 @@
 #
 # If you use pySuStaIn, please cite the following core papers:
 # 1. The original SuStaIn paper:    https://doi.org/10.1038/s41467-018-05892-0
-# 2. The pySuStaIn software paper:  https://doi.org/10.1101/2021.06.09.447713
+# 2. The pySuStaIn software paper:  https://doi.org/10.1016/j.softx.2021.100811
 #
 # Please also cite the corresponding progression pattern model you use:
 # 1. The piece-wise linear z-score model (i.e. ZscoreSustain):  https://doi.org/10.1038/s41467-018-05892-0
