@@ -10,7 +10,7 @@
 # 2. The event-based model (i.e. MixtureSustain):               https://doi.org/10.1016/j.neuroimage.2012.01.062
 #    with Gaussian mixture modeling (i.e. 'mixture_gmm'):       https://doi.org/10.1093/brain/awu176
 #    or kernel density estimation (i.e. 'mixture_kde'):         https://doi.org/10.1002/alz.12083
-# 3. The model for discrete ordinal data (i.e. OrdinalSustain): TBD
+# 3. The model for discrete ordinal data (i.e. OrdinalSustain): https://doi.org/10.3389/frai.2021.613261
 #
 # Thanks a lot for supporting this project.
 #
