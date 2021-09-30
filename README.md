@@ -7,7 +7,7 @@ Acknowledgement
 ================
 If you use pySuStaIn, please cite the following core papers:
 1. [The original SuStaIn paper](https://doi.org/10.1038/s41467-018-05892-0)
-2. [The pySuStaIn software paper](https://doi.org/10.1101/2021.06.09.447713)
+2. [The pySuStaIn software paper](https://doi.org/10.1016/j.softx.2021.100811)
 
 Please also cite the corresponding progression pattern model you use:
 1. [The piecewise linear z-score model (i.e. ZscoreSustain)](https://doi.org/10.1038/s41467-018-05892-0)
@@ -79,7 +79,7 @@ Papers
 ============
 Methods:
 - The SuStaIn algorithm: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
-- The pySuStaIn software paper: [Aksman, Wijeratne et al. 2021](https://doi.org/10.1101/2021.06.09.447713)
+- The pySuStaIn software paper: [Aksman, Wijeratne et al. 2021](https://doi.org/10.1016/j.softx.2021.100811)
 - The event-based model: [Fonteijn et al. 2012](https://doi.org/10.1016/j.neuroimage.2012.01.062), (with Gaussian mixture modelling [Young et al. 2014](https://doi.org/10.1093/brain/awu176) or non-parametric kernel density estimation [Firth et al. 2020](https://doi.org/10.1002/alz.12083))
 - The piecewise linear z-score model: [Young et al. 2018](https://doi.org/10.1038/s41467-018-05892-0) 
 - The scored events model ('Ordinal SuStaIn'): [Young et al. 2021](https://doi.org/10.3389/frai.2021.613261)  
