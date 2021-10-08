@@ -24,7 +24,7 @@ Installation
 ```
 pip install git+https://github.com/ucl-pond/pySuStaIn
 ```
-Note that you can run this install within a brand new conda environment provided you have numpy (1.18+) installed. To do this, follow the instructions in the Troubleshooting section below, then run 'pip install numpy' and then run the above command.
+Note that you can run this install within a brand new conda environment provided you have numpy (1.18+) installed. To do this, follow the instructions in the Troubleshooting section below, then run 'pip install numpy' within the activated environemtn and then run the above command.
 
 ## Install option 2: clone repository, install locally (deprecated)
 In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and all subfolders), run:
