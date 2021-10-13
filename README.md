@@ -20,20 +20,27 @@ Thanks a lot for supporting this project.
 
 Installation
 ============
-## Install option 1: direct install from repository
-```
-pip install git+https://github.com/ucl-pond/pySuStaIn
-```
-Note that you can run this install within a brand new conda environment provided you have numpy (1.18+) installed. To do this, follow the instructions in the Troubleshooting section below, then run 'pip install numpy' within the activated environment and then run the above command.
-
-## Install option 2: clone repository, install locally (deprecated)
+## Install option 1 (for installing the pySuStaIn code in a chosen directory): clone repository, install locally
 In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and all subfolders), run:
 
 ```
 pip install  .
 ```
+or 
 
-This will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
+```
+pip install  -e .
+```
+
+where the '-e' flag allows you to make edits to the code. 
+
+Either option will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
+
+## Install option 2 (for using pySuStaIn as a package): direct install from repository
+```
+pip install git+https://github.com/ucl-pond/pySuStaIn
+```
+Note that you can run this install within a brand new conda environment provided you have numpy (1.18+) installed. To do this, follow the instructions in the Troubleshooting section below, then run 'pip install numpy' within the activated environment and then run the above command.
 
 Troubleshooting
 ============
