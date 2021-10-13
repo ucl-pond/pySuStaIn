@@ -26,15 +26,10 @@ In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and
 ```
 pip install  .
 ```
-or 
 
-```
-pip install  -e .
-```
+Alternatively, you can do ```pip install  -e .``` where the ```-e``` flag allows you to make edits to the code. 
 
-where the '-e' flag allows you to make edits to the code. 
-
-Either option will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
+Either way it will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
 
 ## Install option 2 (for using pySuStaIn as a package): direct install from repository
 ```
