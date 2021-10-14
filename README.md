@@ -21,32 +21,36 @@ Thanks a lot for supporting this project.
 Installation
 ============
 ## Install option 1 (for installing the pySuStaIn code in a chosen directory): clone repository, install locally
-In main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt and all subfolders), run:
 
-```
-pip install  .
-```
+1) [Clone this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
 
-Alternatively, you can do ```pip install  -e .``` where the ```-e``` flag allows you to make edits to the code. 
+2) Navigate to the main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt, and all subfolders), then run:
 
-Either way it will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
+       pip install .
+
+    Alternatively, you can do `pip install -e .` where the `-e` flag allows you to make edits to the code without reinstalling.
+
+Either way, it will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
 
 ## Install option 2 (for simply using pySuStaIn as a package): direct install from repository
-```
-pip install git+https://github.com/ucl-pond/pySuStaIn
-```
-Note that you can run this install within a brand new conda environment provided you have numpy (1.18+) installed. To do this, follow the instructions in the Troubleshooting section below, then run 'pip install numpy' within the activated environment and then run the above command.
+
+1) Run the following command to directly install pySuStaIn:
+
+       pip install git+https://github.com/ucl-pond/pySuStaIn
+
+Note that if you must already have numpy (1.18+) installed to do this. To create a new environment, follow the instructions in the [Troubleshooting](#troubleshooting) section below.
 
 Troubleshooting
 ============
-If the above install breaks, you may have some interfering packages installed. One way around this would be to create a new [Anaconda](https://www.anaconda.com) environment that uses Python 3.7, then activate it and repeat the installation steps above. To do this, download and install Anaconda, then run:
+If the above install breaks, you may have some interfering packages installed. One way around this would be to create a new [Anaconda](https://www.anaconda.com) environment that uses Python 3.7+, then activate it and repeat the installation steps above. To do this, download and install Anaconda/Miniconda, then run:
 
 ```
 conda create  --name sustain_env python=3.7
 conda activate sustain_env
+conda install numpy
 ```
 
-To create an environment named `sustain_env`.
+To create an environment named `sustain_env` and install numpy. Then, follow the installation instructions as normal.
 
 
 
@@ -61,7 +65,7 @@ Dependencies
 - [pathos](https://github.com/uqfoundation/pathos) for parallelization
 - [awkde](https://github.com/mennthor/awkde) for KDE mixture modelling
 
-Parallelisation
+Parallelization
 ===============
 - Added parallelized startpoints
 
