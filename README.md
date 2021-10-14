@@ -65,6 +65,21 @@ Dependencies
 - [pathos](https://github.com/uqfoundation/pathos) for parallelization
 - [awkde](https://github.com/mennthor/awkde) for KDE mixture modelling
 
+Testing
+===============
+If you want to check that the installation was successful, you can run the end-to-end tests. For this, you will need to navigate to the `tests/` subfolder (wherever pySuStaIn has been installed on your system). Then, you can use the following command to run all SuStaIn variants (this may take a bit of time!):
+
+```
+python validation.py -f
+```
+
+For a quicker run (using just `MixtureSustain`), just use:
+```
+python validation.py
+```
+instead. Testing of single classes is possible using the `-c` flag, e.g. `python validation.py -c ordinal`. To see all options, run `python validation.py --help`.
+
+
 Parallelization
 ===============
 - Added parallelized startpoints
