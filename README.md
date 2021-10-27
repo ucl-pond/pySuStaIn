@@ -96,6 +96,7 @@ sustainType can be set to:
 SuStaIn Tutorial
 ===============  
 See the jupyter notebook in the notebooks folder for a tutorial on how to use SuStaIn using simulated data.
+We also have a set of tutorial videos on YouTube, which you can find [here](https://www.youtube.com/watch?v=5CFsfFcVzEc&list=PL25fUWY3exLxYSPOnEe60kSEh0JRdVVPB).
 
 Papers
 ============
