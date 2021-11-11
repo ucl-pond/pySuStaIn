@@ -182,7 +182,7 @@ def main():
     #plot PVDs given subtype and biomarker ordering
     fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, \
                                                           subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12)
-    plt.suptitle('Ground truth sequences')
+    fig.suptitle('Ground truth sequences')
     fig.savefig(os.path.join(output_folder, 'PVD_true.png'))
     fig.show()
 
@@ -215,13 +215,15 @@ def main():
     for i in range(N_S_max):
         X_hist.append(ml_subtype[ground_truth_subtypes==i].ravel())
         labels_hist.append('Subtype ' + str(i+1))
-    plt.hist(X_hist, bins, label=labels_hist)
-    plt.xticks(np.arange(0, N_S_ground_truth)+0.5, np.arange(1, N_S_ground_truth+1))
-    plt.xlabel('Estimated subtype', fontsize=FONT_SIZE)
-    plt.title('')
-    plt.legend(loc='upper right', fontsize=FONT_SIZE)
-    plt.savefig(os.path.join(output_folder, 'Subtype_estimate_histograms.png'))
-    plt.show()
+    fig, ax = plt.subplots()
+    ax.hist(X_hist, bins, label=labels_hist)
+    ax.set_xticks(np.arange(0, N_S_ground_truth)+0.5)
+    ax.set_xticklabels(np.arange(1, N_S_ground_truth+1))
+    ax.set_xlabel('Estimated subtype', fontsize=FONT_SIZE)
+    ax.set_title('')
+    ax.legend(loc='upper right', fontsize=FONT_SIZE)
+    fig.savefig(os.path.join(output_folder, 'Subtype_estimate_histograms.png'))
+    fig.show()
 
     #plot the inferred stages as boxplots binned by true stage
     df_boxplot                  = pd.DataFrame()
@@ -229,12 +231,13 @@ def main():
     df_boxplot['subtypes_est']  = ml_subtype
     df_boxplot['stages_true']   = ground_truth_stages
     df_boxplot['stages_est']    = ml_stage
-    df_boxplot.boxplot(column='stages_est', by='stages_true', grid=False, fontsize=FONT_SIZE)
-    plt.xlabel('True stages',       fontsize=FONT_SIZE)
-    plt.ylabel('Estimated stages',  fontsize=FONT_SIZE)
-    plt.title('')
-    plt.savefig(os.path.join(output_folder, 'Stage_estimate_boxplots.png'))
-    plt.show()
+    fig, ax = plt.subplots()
+    df_boxplot.boxplot(column='stages_est', by='stages_true', grid=False, fontsize=FONT_SIZE, ax=ax)
+    ax.set_xlabel('True stages',       fontsize=FONT_SIZE)
+    ax.set_ylabel('Estimated stages',  fontsize=FONT_SIZE)
+    ax.set_title('')
+    fig.savefig(os.path.join(output_folder, 'Stage_estimate_boxplots.png'))
+    fig.show()
 
     print('Maximum likelihood model finished. Saved figures and output files in ' + output_folder + ' folder.')
 
@@ -272,8 +275,6 @@ def main():
         #this part estimates cross-validated positional variance diagrams
         for i in range(N_S_max):
             sustain.combine_cross_validated_sequences(i+1, N_folds)
-
-    plt.show()
 
     print('Cross-validation finished. Saved figures and output files in ' + output_folder + ' folder.')
 
