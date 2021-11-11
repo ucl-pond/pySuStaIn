@@ -15,6 +15,7 @@ from scipy.stats import norm
 
 from pySuStaIn.AbstractSustain import AbstractSustainData
 from pySuStaIn.AbstractSustain import AbstractSustain
+from pySuStaIn.ZscoreSustain import ZscoreSustain
 
 #*******************************************
 #The data structure class for ZscoreSustainMissingData. It holds the z-scored data that gets passed around and re-indexed in places.
@@ -447,113 +448,9 @@ class ZscoreSustainMissingData(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=10):
-
-        colour_mat                          = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]]) #, [0.5, 0, 1], [0, 1, 1]])
-
-        temp_mean_f                         = np.mean(samples_f, 1)
-        vals                                = np.sort(temp_mean_f)[::-1]
-        vals                                = np.array([np.round(x * 100.) for x in vals]) / 100.
-        ix                                  = np.argsort(temp_mean_f)[::-1]
-
-        N_S                                 = samples_sequence.shape[0]
-        N_bio                               = len(self.biomarker_labels)
-
-        if N_S == 1:
-            fig, ax                         = plt.subplots()
-            total_axes                      = 1;
-        elif N_S < 3:
-            fig, ax                         = plt.subplots(1, N_S)
-            total_axes                      = N_S
-        elif N_S < 7:
-            fig, ax                         = plt.subplots(2, int(np.ceil(N_S / 2)))
-            total_axes                      = 2 * int(np.ceil(N_S / 2))
-        else:
-            fig, ax                         = plt.subplots(3, int(np.ceil(N_S / 3)))
-            total_axes                      = 3 * int(np.ceil(N_S / 3))
-
-
-        for i in range(total_axes):        #range(N_S):
-
-            if i not in range(N_S):
-                ax.flat[i].set_axis_off()
-                continue
-
-            this_samples_sequence           = samples_sequence[ix[i],:,:].T
-            markers                         = np.unique(self.stage_biomarker_index)
-            N                               = this_samples_sequence.shape[1]
-
-            confus_matrix                   = np.zeros((N, N))
-            for j in range(N):
-                confus_matrix[j, :]         = sum(this_samples_sequence == j)
-            confus_matrix                   /= float(this_samples_sequence.shape[0])
-
-            zvalues                         = np.unique(self.stage_zscore)
-            N_z                             = len(zvalues)
-            confus_matrix_z                 = np.zeros((N_bio, N, N_z))
-            for z in range(N_z):
-                confus_matrix_z[self.stage_biomarker_index[self.stage_zscore == zvalues[z]], :, z] = confus_matrix[(self.stage_zscore == zvalues[z])[0],:]
-
-            confus_matrix_c                 = np.ones((N_bio, N, 3))
-            for z in range(N_z):
-                this_confus_matrix          = confus_matrix_z[:, :, z]
-                this_colour                 = colour_mat[z, :]
-                alter_level                 = this_colour == 0
-
-                this_colour_matrix          = np.zeros((N_bio, N, 3))
-                this_colour_matrix[:, :, alter_level] = np.tile(this_confus_matrix[markers, :].reshape(N_bio, N, 1), (1, 1, sum(alter_level)))
-                confus_matrix_c             = confus_matrix_c - this_colour_matrix
-
-            TITLE_FONT_SIZE                 = title_font_size
-            X_FONT_SIZE                     = 10 #8
-            Y_FONT_SIZE                     = 10 #7 
-
-            if cval == False:                
-                if n_samples != np.inf:
-                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i])  + r', n=' + str(int(np.round(vals[i] * n_samples)))  + ')'
-                else:
-                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i]) + ')'
-            else:
-                title_i                     = 'Subtype ' + str(i+1) + ' cross-validated'
-
-            # must be a smarter way of doing this, but subplots(1,1) doesn't produce an array...
-            if N_S > 1:
-                ax_i                        = ax.flat[i] #ax[i]
-                ax_i.imshow(confus_matrix_c, interpolation='nearest')      #, cmap=plt.cm.Blues)
-                ax_i.set_xticks(np.arange(N))
-                ax_i.set_xticklabels(range(1, N+1), rotation=45, fontsize=X_FONT_SIZE)
-
-                ax_i.set_yticks(np.arange(N_bio))
-                ax_i.set_yticklabels([]) #['']* N_bio)
-                if i == 0:
-                    ax_i.set_yticklabels(np.array(self.biomarker_labels, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)
-                    for tick in ax_i.yaxis.get_major_ticks():
-                        tick.label.set_color('black')
-
-                #ax[i].set_ylabel('Biomarker name') #, fontsize=20)
-                ax_i.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
-                ax_i.set_title(title_i, fontsize=TITLE_FONT_SIZE)
-        
-            else: #**** first plot
-                ax.imshow(confus_matrix_c) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
-                ax.set_xticks(np.arange(N))
-                ax.set_xticklabels(range(1, N+1), rotation=45, fontsize=X_FONT_SIZE)
-
-                ax.set_yticks(np.arange(N_bio))
-                ax.set_yticklabels(np.array(self.biomarker_labels, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)
-
-                for tick in ax.yaxis.get_major_ticks():
-                    tick.label.set_color('black')
-
-                ax.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
-                ax.set_title(title_i, fontsize=TITLE_FONT_SIZE)
-                
-        plt.tight_layout()
-        #if cval:
-        #    fig.suptitle('Cross validation')
-
-        return fig, ax
-
+    def _plot_sustain_model(self, *args, **kwargs):
+        # TODO: ZscoreMissing should be a child of Zscore
+        return ZscoreSustain._plot_sustain_model(self, *args, **kwargs)
 
     def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
