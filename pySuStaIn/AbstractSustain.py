@@ -116,7 +116,7 @@ class AbstractSustain(ABC):
             self.pool                   = pathos.serial.SerialPool()
 
     #********************* PUBLIC METHODS
-    def run_sustain_algorithm(self, plot=False):
+    def run_sustain_algorithm(self, plot=False, plot_format="png", **kwargs):
         # Externally called method to start the SuStaIn algorithm after initializing the SuStaIn class object properly
 
         ml_sequence_prev_EM                 = []
@@ -219,8 +219,8 @@ class AbstractSustain(ABC):
 
             # plot results
             if plot:
-                fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
-                fig.savefig(Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.png")
+                fig, ax = self._plot_sustain_model(samples_sequence, samples_f, n_samples, **kwargs)
+                fig.savefig(Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.{plot_format}")
                 fig.show()
 
                 ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
@@ -229,7 +229,7 @@ class AbstractSustain(ABC):
         if plot:
             ax0.legend(loc='upper right')
             fig0.tight_layout()
-            fig0.savefig(Path(self.output_folder) / "MCMC_likelihoods.png", bbox_inches='tight')
+            fig0.savefig(Path(self.output_folder) / f"MCMC_likelihoods.{plot_format}", bbox_inches='tight')
             fig0.show()
 
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
@@ -318,9 +318,9 @@ class AbstractSustain(ABC):
                     samples_sequence,       \
                     samples_f,              \
                     samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_test, seq_init, f_init)
-               
+
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
-                 
+
                     mean_likelihood_subj_test    = np.mean(samples_likelihood_subj_test,axis=1)
 
                     ml_sequence_prev_EM         = ml_sequence_EM
@@ -388,7 +388,7 @@ class AbstractSustain(ABC):
         return CVIC, loglike_matrix
 
 
-    def combine_cross_validated_sequences(self, N_subtypes, N_folds):
+    def combine_cross_validated_sequences(self, N_subtypes, N_folds, plot_format="png", **kwargs):
         # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
         # so that you get more realistic estimates of variance within event positions within subtypes
 
@@ -449,8 +449,8 @@ class AbstractSustain(ABC):
             # 4. Find the order in which this fold's subtypes first appear in the sorted list
             corr_mat                        = np.zeros((N_subtypes, N_subtypes))
             for j in range(N_subtypes):
-               for k in range(N_subtypes):
-                   corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
+                for k in range(N_subtypes):
+                    corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
             set_full                        = []
             set_fold_i                      = []
             i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
@@ -478,16 +478,20 @@ class AbstractSustain(ABC):
         # order of biomarkers in each subtypes' positional variance diagram
         plot_biomarker_order                = ml_sequence_EM_full[plot_subtype_order[0], :].astype(int)
 
-        fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True,
-                                                                       subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12)
+        fig, ax                             = self._plot_sustain_model(
+            samples_sequence_cval, samples_f_cval, n_samples, cval=True,
+            subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12,
+            **kwargs
+        )
 
         # save and show this figure after all subtypes have been calculcated
-        png_filename                        = Path(self.output_folder) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.png"
+        plot_fname = Path(
+            self.output_folder
+        ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.{plot_format}"
 
         #ax.legend(loc='upper right')
-        fig.savefig(png_filename, bbox_inches='tight')
+        fig.savefig(plot_fname, bbox_inches='tight')
         fig.show()
-
 
         #return samples_sequence_cval, samples_f_cval, kendalls_tau_mat, f_mat #samples_sequence_cval
 
