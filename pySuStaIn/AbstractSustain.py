@@ -23,6 +23,7 @@ from tqdm.auto import tqdm
 import numpy as np
 import scipy.stats as stats
 from matplotlib import pyplot as plt
+import matplotlib.colors as mcolors
 from pathlib import Path
 import pickle
 import csv
@@ -1053,6 +1054,28 @@ class AbstractSustain(ABC):
     def calc_exp(x, mu, sig):
         x = (x - mu) / sig
         return np.exp(-.5 * x * x)
+
+    @staticmethod
+    def check_biomarker_colours(biomarker_colours, biomarker_labels):
+        if isinstance(biomarker_colours, dict):
+            # Check each label exists
+            assert all(i in biomarker_labels for i in biomarker_colours.keys()), "A label doesn't match!"
+            # Check each colour exists
+            assert all(mcolors.is_color_like(i) for i in biomarker_colours.values()), "A proper colour wasn't given!"
+            # Add in any colours that aren't defined, allowing for partial colouration
+            for label in biomarker_labels:
+                if label not in biomarker_colours:
+                    biomarker_colours[label] = "black"
+        elif isinstance(biomarker_colours, (list, tuple)):
+            # Check each colour exists
+            assert all(mcolors.is_color_like(i) for i in biomarker_colours), "A proper colour wasn't given!"
+            # Check right number of colours given
+            assert len(biomarker_colours) == len(biomarker_labels), "The number of colours and labels do not match!"
+            # Turn list of colours into a label:colour mapping
+            biomarker_colours = {k:v for k,v in zip(biomarker_labels, biomarker_colours)}
+        else:
+            raise TypeError("A dictionary mapping label:colour or list/tuple of colours must be given!")
+        return biomarker_colours
 
     # ********************* TEST METHODS
     @staticmethod
