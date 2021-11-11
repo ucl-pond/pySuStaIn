@@ -402,108 +402,141 @@ class OrdinalSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=8):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None):
 
         if subtype_order is None:
-            subtype_order                   = self._plot_subtype_order
+            subtype_order = self._plot_subtype_order
 
-        #biomarker_order currently unused here
+        # Get the z-scores and their number
+        zvalues = np.unique(self.stage_score)
+        N_z = len(zvalues)
 
-        colour_mat                          = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]]) #, [0.5, 0, 1], [0, 1, 1]])
+        N_S = samples_sequence.shape[0]
+        N_bio = len(self.biomarker_labels)
 
-        temp_mean_f                         = np.mean(samples_f, 1)
-        vals                                = np.sort(temp_mean_f)[::-1]
-        vals                                = np.array([np.round(x * 100.) for x in vals]) / 100.
-        #ix                                  = np.argsort(temp_mean_f)[::-1]
-
-        N_S                                 = samples_sequence.shape[0]
-        N_bio                               = len(self.biomarker_labels)
-
-        if N_S == 1:
-            fig, ax                         = plt.subplots()
-            total_axes                      = 1
-        elif N_S < 3:
-            fig, ax                         = plt.subplots(1, N_S)
-            total_axes                      = N_S
-        elif N_S < 7:
-            fig, ax                         = plt.subplots(2, int(np.ceil(N_S / 2)))
-            total_axes                      = 2 * int(np.ceil(N_S / 2))
+        if biomarker_order is not None:
+            # self._plot_biomarker_order is not suited to zscore version
+            # Ignore for compatability, for now
+            # One option is to reshape, sum position, and lowest->highest determines order
+            if len(biomarker_order) > len(self.biomarker_labels):
+                biomarker_order = np.arange(N_bio)
+            # Get reordered labels
+            biomarker_labels = [self.biomarker_labels[i] for i in biomarker_order]
+        # Otherwise use default order
         else:
-            fig, ax                         = plt.subplots(3, int(np.ceil(N_S / 3)))
-            total_axes                      = 3 * int(np.ceil(N_S / 3))
+            biomarker_order = np.arange(N_bio)
+            biomarker_labels = self.biomarker_labels
+        
+        # Z-score colour definition
+        if cmap == "original":
+            # Hard-coded colours: hooray!
+            colour_mat = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1], [0.5, 0, 1], [0, 1, 1], [0, 1, 0.5]])[:N_z]
+            # We only have up to 5 default colours, so double-check
+            if colour_mat.shape[0] > N_z:
+                raise ValueError(f"Colours are only defined for {len(colour_mat)} z-scores!")
+        else:
+            raise NotImplementedError
+        '''
+        Note for future self/others: The use of any arbitrary colourmap is problematic, as when the same stage can have the same biomarker with different z-scores of different certainties, the colours need to mix in a visually informative way and there can be issues with RGB mixing/interpolation, particulary if there are >2 z-scores for the same biomarker at the same stage. It may be possible, but the end result may no longer be useful to look at.
+        '''
 
+        # Check biomarker label colours
+        # If custom biomarker text colours are given
+        if biomarker_colours is not None:
+            biomarker_colours = type(self).check_biomarker_colours(
+            biomarker_colours, biomarker_labels
+        )
+        # Default case of all-black colours
+        # Unnecessary, but skips a check later
+        else:
+            biomarker_colours = {i:"black" for i in biomarker_labels}
 
-        for i in range(total_axes):        #range(N_S):
+        # Determine number of rows and columns (rounded up)
+        if N_S == 1:
+            nrows, ncols = 1, 1
+        elif N_S < 3:
+            nrows, ncols = 1, N_S
+        elif N_S < 7:
+            nrows, ncols = 2, int(np.ceil(N_S / 2))
+        else:
+            nrows, ncols = 3, int(np.ceil(N_S / 3))
+        # Total axes used to loop over
+        total_axes = nrows * ncols
+        fig, axs = plt.subplots(nrows, ncols, figsize=figsize)
 
+        # Loop over each axis
+        for i in range(total_axes):
+            # Handle case of a single array
+            if isinstance(axs, np.ndarray):
+                ax = axs.flat[i]
+            else:
+                ax = axs
+            # Check if i is superfluous
             if i not in range(N_S):
-                ax.flat[i].set_axis_off()
+                ax.set_axis_off()
                 continue
 
-            this_samples_sequence           = samples_sequence[subtype_order[i],:,:].T
-            markers                         = np.unique(self.stage_biomarker_index)
-            N                               = this_samples_sequence.shape[1]
+            this_samples_sequence = samples_sequence[subtype_order[i],:,:].T
+            N = this_samples_sequence.shape[1]
 
-            confus_matrix                   = np.zeros((N, N))
-            for j in range(N):
-                confus_matrix[j, :]         = sum(this_samples_sequence == j)
-            confus_matrix                   /= float(this_samples_sequence.shape[0])
+            # Construct confusion matrix (vectorized)
+            # We compare `this_samples_sequence` against each position
+            # Sum each time it was observed at that point in the sequence
+            # And normalize for number of samples/sequences
+            confus_matrix = (this_samples_sequence==np.arange(N)[:, None, None]).sum(1) / this_samples_sequence.shape[0]
 
-            zvalues                         = np.unique(self.stage_score)
-            N_z                             = len(zvalues)
-            confus_matrix_z                 = np.zeros((N_bio, N, N_z))
-            for z in range(N_z):
-                confus_matrix_z[self.stage_biomarker_index[self.stage_score == zvalues[z]], :, z] = confus_matrix[(self.stage_score == zvalues[z])[0],:]
+            # Define the confusion matrix to insert the colours
+            # Use 1s to start with all white
+            confus_matrix_c = np.ones((N_bio, N, 3))
 
-            confus_matrix_c                 = np.ones((N_bio, N, 3))
-            for z in range(N_z):
-                this_confus_matrix          = confus_matrix_z[:, :, z]
-                this_colour                 = colour_mat[z, :]
-                alter_level                 = this_colour == 0
+            # Loop over each z-score event
+            for j, z in enumerate(zvalues):
+                # Determine which colours to alter
+                # I.e. red (1,0,0) means removing green & blue channels
+                # according to the certainty of red (representing z-score 1)
+                alter_level = colour_mat[j] == 0
+                # Extract the uncertainties for this z-score
+                confus_matrix_zscore = confus_matrix[(self.stage_score==z)[0]]
+                # Subtract the certainty for this colour
+                confus_matrix_c[:, :, alter_level] -= np.tile(
+                    confus_matrix_zscore.reshape(N_bio, N, 1),
+                    (1, 1, alter_level.sum())
+                )
+            # Add axis title
+            if cval == False:
+                temp_mean_f = np.mean(samples_f, 1)
+                vals = np.sort(temp_mean_f)[::-1]
 
-                this_colour_matrix          = np.zeros((N_bio, N, 3))
-                this_colour_matrix[:, :, alter_level] = np.tile(this_confus_matrix[markers, :].reshape(N_bio, N, 1), (1, 1, sum(alter_level)))
-                confus_matrix_c             = confus_matrix_c - this_colour_matrix
+                if n_samples != np.inf:
+                    title_i = f"Group {i+1} (f={vals[i]:.2f}, n={np.round(vals[i] * n_samples):n})"
+                else:
+                    title_i = f"Group {i+1} (f={vals[i]:.2f})"
+            else:
+                title_i = f"Subtype {i+1} cross-validated"
+            # Plot the colourized matrix
+            ax.imshow(
+                confus_matrix_c[biomarker_order, :, :],
+                interpolation='nearest'
+            )
+            # Add the xticks and labels
+            stage_ticks = np.arange(0, N, stage_interval)
+            ax.set_xticks(stage_ticks)
+            ax.set_xticklabels(stage_ticks+1, fontsize=stage_font_size, rotation=stage_rot)
+            # Add the yticks and labels
+            ax.set_yticks(np.arange(N_bio))
+            # Add biomarker labels to LHS of every row only
+            if (i % ncols) == 0:
+                ax.set_yticklabels(biomarker_labels, ha='right', fontsize=label_font_size, rotation=label_rot)
+                # Set biomarker label colours
+                for tick_label in ax.get_yticklabels():
+                    tick_label.set_color(biomarker_colours[tick_label.get_text()])
+            else:
+                ax.set_yticklabels([])
+            # Make the event label slightly bigger than the ticks
+            ax.set_xlabel(stage_label, fontsize=stage_font_size+2)
+            ax.set_title(title_i, fontsize=title_font_size)
 
-            TITLE_FONT_SIZE                 = title_font_size
-            X_FONT_SIZE                     = 8
-            Y_FONT_SIZE                     = 7
-
-            # must be a smarter way of doing this, but subplots(1,1) doesn't produce an array...
-            if N_S > 1:
-                ax_i                        = ax.flat[i] #ax[i]
-                ax_i.imshow(confus_matrix_c, interpolation='nearest')      #, cmap=plt.cm.Blues)
-                ax_i.set_xticks(np.arange(N))
-                ax_i.set_xticklabels(range(1, N+1), rotation=45, fontsize=X_FONT_SIZE)
-
-                ax_i.set_yticks(np.arange(N_bio))
-                ax_i.set_yticklabels([]) #['']* N_bio)
-                if i == 0:
-                    ax_i.set_yticklabels(np.array(self.biomarker_labels, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)
-                    for tick in ax_i.yaxis.get_major_ticks():
-                        tick.label.set_color('black')
-
-                #ax[i].set_ylabel('Biomarker name') #, fontsize=20)
-                ax_i.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
-                ax_i.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
-
-            else: #**** first plot
-                ax.imshow(confus_matrix_c) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
-                ax.set_xticks(np.arange(N))
-                ax.set_xticklabels(range(1, N+1), rotation=45, fontsize=X_FONT_SIZE)
-
-                ax.set_yticks(np.arange(N_bio))
-                ax.set_yticklabels(np.array(self.biomarker_labels, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)
-
-                for tick in ax.yaxis.get_major_ticks():
-                    tick.label.set_color('black')
-
-                ax.set_xlabel('SuStaIn stage', fontsize=X_FONT_SIZE)
-                ax.set_title('Group ' + str(i) + ' (f=' + str(vals[i])  + r', n$\sim$' + str(int(np.round(vals[i] * n_samples)))  + ')', fontsize=TITLE_FONT_SIZE)
-
-        plt.tight_layout()
-        if cval:
-            fig.suptitle('Cross validation')
-
+        fig.tight_layout()
         return fig, ax
 
 
