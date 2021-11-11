@@ -1038,7 +1038,10 @@ class AbstractSustain(ABC):
         pass
 
     @abstractmethod
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=10):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False,
+    subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10,
+    stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10,
+    label_rot=0, cmap=None, biomarker_colours=None, figsize=None):
         pass
 
     @abstractmethod
