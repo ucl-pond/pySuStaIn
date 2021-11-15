@@ -88,6 +88,7 @@ class ZscoreSustainMissingData(AbstractSustain):
         stage_biomarker_index   = stage_biomarker_index[IX_select]
         stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
 
+        self.Z_vals                     = Z_vals
         self.stage_zscore               = stage_zscore
         self.stage_biomarker_index      = stage_biomarker_index
 
@@ -450,7 +451,7 @@ class ZscoreSustainMissingData(AbstractSustain):
 
     def _plot_sustain_model(self, *args, **kwargs):
         # TODO: ZscoreMissing should be a child of Zscore
-        return ZscoreSustain._plot_sustain_model(self, *args, **kwargs)
+        return ZscoreSustain.plot_positional_var(*args, Z_vals=self.Z_vals, **kwargs)
 
     def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
@@ -471,6 +472,11 @@ class ZscoreSustainMissingData(AbstractSustain):
     @staticmethod
     def linspace_local2(a, b, N, arange_N):
         return a + (b - a) / (N - 1.) * arange_N
+
+    @staticmethod
+    def plot_positional_var():
+        # TODO: ZscoreMissing should be a child of Zscore
+        pass
 
     # ********************* TEST METHODS
     @classmethod

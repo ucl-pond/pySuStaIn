@@ -17,6 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
+import warnings
 from tqdm.auto import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
@@ -96,6 +97,7 @@ class ZscoreSustain(AbstractSustain):
         stage_biomarker_index   = stage_biomarker_index[IX_select]
         stage_biomarker_index   = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
 
+        self.Z_vals                     = Z_vals
         self.stage_zscore               = stage_zscore
         self.stage_biomarker_index      = stage_biomarker_index
 
@@ -445,30 +447,73 @@ class ZscoreSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None):
+    def _plot_sustain_model(self, *args, **kwargs):
+        return ZscoreSustain.plot_positional_var(*args, Z_vals=self.Z_vals, **kwargs)
 
-        if subtype_order is None:
-            subtype_order = self._plot_subtype_order
+    def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
 
-        # Get the z-scores and their number
-        zvalues = np.unique(self.stage_zscore)
-        N_z = len(zvalues)
+        numStages_new                   = self.__sustainData.getNumStages() #data_new.shape[1]
+        sustainData_newData             = ZScoreSustainData(data_new, numStages_new)
 
+        ml_subtype,         \
+        prob_ml_subtype,    \
+        ml_stage,           \
+        prob_ml_stage,      \
+        prob_subtype,       \
+        prob_stage,         \
+        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
+
+    # ********************* STATIC METHODS
+    @staticmethod
+    def linspace_local2(a, b, N, arange_N):
+        return a + (b - a) / (N - 1.) * arange_N
+
+    @staticmethod
+    def plot_positional_var(samples_sequence, samples_f, n_samples, Z_vals, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None):
+        # Get the number of subtypes
         N_S = samples_sequence.shape[0]
-        N_bio = len(self.biomarker_labels)
-
+        # Get the number of features/biomarkers
+        N_bio = Z_vals.shape[0]
+        # Check that the number of labels given match
+        if biomarker_labels is not None:
+            assert len(biomarker_labels) == N_bio
+        # Set subtype order if not given
+        if subtype_order is None:
+            # Determine order if info given
+            if ml_f_EM is not None:
+                subtype_order = np.argsort(ml_f_EM)[::-1]
+            # Otherwise use dummy ordering
+            else:
+                subtype_order = np.arange(N_S)
+        # Unravel the stage zscores from Z_vals
+        stage_zscore = Z_vals.T.flatten()
+        IX_select = np.nonzero(stage_zscore)[0]
+        stage_zscore = stage_zscore[IX_select][None, :]
+        # Get the z-scores and their number
+        zvalues = np.unique(stage_zscore)
+        N_z = len(zvalues)
+        # Warn user of reordering if labels and order given
+        if biomarker_labels is not None and biomarker_order is not None:
+            warnings.warn(
+                "Both labels and an order have been given. The labels will be reordered according to the given order!"
+            )
         if biomarker_order is not None:
             # self._plot_biomarker_order is not suited to zscore version
             # Ignore for compatability, for now
             # One option is to reshape, sum position, and lowest->highest determines order
-            if len(biomarker_order) > len(self.biomarker_labels):
+            if len(biomarker_order) > N_bio:
                 biomarker_order = np.arange(N_bio)
-            # Get reordered labels
-            biomarker_labels = [self.biomarker_labels[i] for i in biomarker_order]
         # Otherwise use default order
         else:
             biomarker_order = np.arange(N_bio)
-            biomarker_labels = self.biomarker_labels
+        # If no labels given, set dummy defaults
+        if biomarker_labels is None:
+            biomarker_labels = [f"Biomarker {i}" for i in range(N_bio)]
+        # Otherwise reorder according to given order (or not if not given)
+        else:
+            biomarker_labels = [biomarker_labels[i] for i in biomarker_order]
 
         # Z-score colour definition
         if cmap == "original":
@@ -486,7 +531,7 @@ class ZscoreSustain(AbstractSustain):
         # Check biomarker label colours
         # If custom biomarker text colours are given
         if biomarker_colours is not None:
-            biomarker_colours = type(self).check_biomarker_colours(
+            biomarker_colours = AbstractSustain.check_biomarker_colours(
             biomarker_colours, biomarker_labels
         )
         # Default case of all-black colours
@@ -539,7 +584,7 @@ class ZscoreSustain(AbstractSustain):
                 # according to the certainty of red (representing z-score 1)
                 alter_level = colour_mat[j] == 0
                 # Extract the uncertainties for this z-score
-                confus_matrix_zscore = confus_matrix[(self.stage_zscore==z)[0]]
+                confus_matrix_zscore = confus_matrix[(stage_zscore==z)[0]]
                 # Subtract the certainty for this colour
                 confus_matrix_c[:, :, alter_level] -= np.tile(
                     confus_matrix_zscore.reshape(N_bio, N, 1),
@@ -581,27 +626,6 @@ class ZscoreSustain(AbstractSustain):
 
         fig.tight_layout()
         return fig, ax
-
-
-    def subtype_and_stage_individuals_newData(self, data_new, samples_sequence, samples_f, N_samples):
-
-        numStages_new                   = self.__sustainData.getNumStages() #data_new.shape[1]
-        sustainData_newData             = ZScoreSustainData(data_new, numStages_new)
-
-        ml_subtype,         \
-        prob_ml_subtype,    \
-        ml_stage,           \
-        prob_ml_stage,      \
-        prob_subtype,       \
-        prob_stage,         \
-        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
-
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
-
-    # ********************* STATIC METHODS
-    @staticmethod
-    def linspace_local2(a, b, N, arange_N):
-        return a + (b - a) / (N - 1.) * arange_N
 
     # ********************* TEST METHODS
     @classmethod

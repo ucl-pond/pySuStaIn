@@ -17,6 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
+import warnings
 from tqdm.auto import tqdm
 import numpy as np
 import scipy.stats as stats
@@ -106,7 +107,7 @@ class MixtureSustain(AbstractSustain):
 
     def _calculate_likelihood_stage(self, sustainData, S):
         '''
-         Computes the likelihood of a single event based model
+        Computes the likelihood of a single event based model
 
         Inputs:
         =======
@@ -322,22 +323,47 @@ class MixtureSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label="Event Position", stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="Oranges", biomarker_colours=None, figsize=None):
+    def _plot_sustain_model(self, *args, **kwargs):
+        return MixtureSustain.plot_positional_var(*args, **kwargs)
 
-        if subtype_order is None:
-            subtype_order = self._plot_subtype_order
-        if biomarker_order is None:
-            biomarker_order = self._plot_biomarker_order
 
-        biomarker_labels = [self.biomarker_labels[i].replace('_', ' ') for i in biomarker_order]
-
+    # ********************* STATIC METHODS
+    @staticmethod
+    def plot_positional_var(samples_sequence, samples_f, n_samples, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label="Event Position", stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="Oranges", biomarker_colours=None, figsize=None):
+        # Get the number of subtypes
         N_S = samples_sequence.shape[0]
-        N_bio = len(self.biomarker_labels)
+        # Get the number of features/biomarkers
+        N_bio = samples_sequence.shape[1]
+        # Check that the number of labels given match
+        if biomarker_labels is not None:
+            assert len(biomarker_labels) == N_bio
+        # Set subtype order if not given
+        if subtype_order is None:
+            # Determine order if info given
+            if ml_f_EM is not None:
+                subtype_order = np.argsort(ml_f_EM)[::-1]
+            # Otherwise use dummy ordering
+            else:
+                subtype_order = np.arange(N_S)
+        # Warn user of reordering if labels and order given
+        if biomarker_labels is not None and biomarker_order is not None:
+            warnings.warn(
+                "Both labels and an order have been given. The labels will be reordered according to the given order!"
+            )
+        # Use default order if none given
+        if biomarker_order is None:
+            biomarker_order = np.arange(N_bio)
+        # If no labels given, set dummy defaults
+        if biomarker_labels is None:
+            biomarker_labels = [f"Biomarker {i}" for i in range(N_bio)]
+        # Otherwise reorder according to given order (or not if not given)
+        else:
+            biomarker_labels = [biomarker_labels[i] for i in biomarker_order]
 
         # Check biomarker label colours
         # If custom biomarker text colours are given
         if biomarker_colours is not None:
-            biomarker_colours = type(self).check_biomarker_colours(
+            biomarker_colours = AbstractSustain.check_biomarker_colours(
             biomarker_colours, biomarker_labels
         )
         # Default case of all-black colours
@@ -441,7 +467,6 @@ class MixtureSustain(AbstractSustain):
 
         return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
-    # ********************* STATIC METHODS
     @staticmethod
     def linspace_local2(a, b, N, arange_N):
         return a + (b - a) / (N - 1.) * arange_N

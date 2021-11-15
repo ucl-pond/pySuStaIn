@@ -17,6 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
+import warnings
 from tqdm.auto import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
@@ -105,6 +106,7 @@ class OrdinalSustain(AbstractSustain):
 
         self.IX_select                  = IX_select
 
+        self.score_vals                 = score_vals
         self.stage_score                = stage_score
         self.stage_biomarker_index      = stage_biomarker_index
 
@@ -402,31 +404,84 @@ class OrdinalSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None):
+    def _plot_sustain_model(self, *args, **kwargs):
+        return OrdinalSustain.plot_positional_var(*args, score_vals=self.score_vals, **kwargs)
 
-        if subtype_order is None:
-            subtype_order = self._plot_subtype_order
+    def subtype_and_stage_individuals_newData(self, prob_nl_new, prob_score_new, samples_sequence, samples_f, N_samples):
 
-        # Get the z-scores and their number
-        zvalues = np.unique(self.stage_score)
-        N_z = len(zvalues)
+        numBio_new                   = prob_nl_new.shape[1]
+        assert numBio_new == self.__sustainData.getNumBiomarkers(), "Number of biomarkers in new data should be same as in training data"
 
+        numStages = self.__sustainData.getNumStages()
+        
+        prob_score_new = prob_score_new.transpose(0,2,1)
+        prob_score_new = prob_score_new.reshape(prob_score_new.shape[0],prob_score_new.shape[1]*prob_score_new.shape[2])
+        prob_score_new = prob_score_new[:,self.IX_select[0,:]]
+        prob_score_new = prob_score_new.reshape(prob_nl_new.shape[0],self.stage_score.shape[1])
+
+        sustainData_newData             = OrdinalSustainData(prob_nl_new, prob_score_new, numStages)
+
+        ml_subtype,         \
+        prob_ml_subtype,    \
+        ml_stage,           \
+        prob_ml_stage,      \
+        prob_subtype,       \
+        prob_stage,         \
+        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
+
+        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
+
+
+    # ********************* STATIC METHODS
+    @staticmethod
+    def linspace_local2(a, b, N, arange_N):
+        return a + (b - a) / (N - 1.) * arange_N
+
+    @staticmethod
+    def plot_positional_var(samples_sequence, samples_f, n_samples, score_vals, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None):
+        # Get the number of subtypes
         N_S = samples_sequence.shape[0]
-        N_bio = len(self.biomarker_labels)
-
+        # Get the number of features/biomarkers
+        N_bio = score_vals.shape[0]
+        # Check that the number of labels given match
+        if biomarker_labels is not None:
+            assert len(biomarker_labels) == N_bio
+        # Set subtype order if not given
+        if subtype_order is None:
+            # Determine order if info given
+            if ml_f_EM is not None:
+                subtype_order = np.argsort(ml_f_EM)[::-1]
+            # Otherwise use dummy ordering
+            else:
+                subtype_order = np.arange(N_S)
+        # Unravel the stage scores from score_vals
+        stage_score = score_vals.T.flatten()
+        IX_select = np.nonzero(stage_score)[0]
+        stage_score = stage_score[IX_select][None, :]
+        # Get the z-scores and their number
+        num_scores = np.unique(stage_score)
+        N_z = len(num_scores)
+        # Warn user of reordering if labels and order given
+        if biomarker_labels is not None and biomarker_order is not None:
+            warnings.warn(
+                "Both labels and an order have been given. The labels will be reordered according to the given order!"
+            )
         if biomarker_order is not None:
-            # self._plot_biomarker_order is not suited to zscore version
+            # self._plot_biomarker_order is not suited to this version
             # Ignore for compatability, for now
             # One option is to reshape, sum position, and lowest->highest determines order
-            if len(biomarker_order) > len(self.biomarker_labels):
+            if len(biomarker_order) > N_bio:
                 biomarker_order = np.arange(N_bio)
-            # Get reordered labels
-            biomarker_labels = [self.biomarker_labels[i] for i in biomarker_order]
         # Otherwise use default order
         else:
             biomarker_order = np.arange(N_bio)
-            biomarker_labels = self.biomarker_labels
-        
+        # If no labels given, set dummy defaults
+        if biomarker_labels is None:
+            biomarker_labels = [f"Biomarker {i}" for i in range(N_bio)]
+        # Otherwise reorder according to given order (or not if not given)
+        else:
+            biomarker_labels = [biomarker_labels[i] for i in biomarker_order]
+
         # Z-score colour definition
         if cmap == "original":
             # Hard-coded colours: hooray!
@@ -443,7 +498,7 @@ class OrdinalSustain(AbstractSustain):
         # Check biomarker label colours
         # If custom biomarker text colours are given
         if biomarker_colours is not None:
-            biomarker_colours = type(self).check_biomarker_colours(
+            biomarker_colours = AbstractSustain.check_biomarker_colours(
             biomarker_colours, biomarker_labels
         )
         # Default case of all-black colours
@@ -490,16 +545,16 @@ class OrdinalSustain(AbstractSustain):
             confus_matrix_c = np.ones((N_bio, N, 3))
 
             # Loop over each z-score event
-            for j, z in enumerate(zvalues):
+            for j, z in enumerate(num_scores):
                 # Determine which colours to alter
                 # I.e. red (1,0,0) means removing green & blue channels
                 # according to the certainty of red (representing z-score 1)
                 alter_level = colour_mat[j] == 0
                 # Extract the uncertainties for this z-score
-                confus_matrix_zscore = confus_matrix[(self.stage_score==z)[0]]
+                confus_matrix_score = confus_matrix[(stage_score==z)[0]]
                 # Subtract the certainty for this colour
                 confus_matrix_c[:, :, alter_level] -= np.tile(
-                    confus_matrix_zscore.reshape(N_bio, N, 1),
+                    confus_matrix_score.reshape(N_bio, N, 1),
                     (1, 1, alter_level.sum())
                 )
             # Add axis title
@@ -512,7 +567,7 @@ class OrdinalSustain(AbstractSustain):
                 else:
                     title_i = f"Group {i+1} (f={vals[i]:.2f})"
             else:
-                title_i = f"Subtype {i+1} cross-validated"
+                title_i = f"Group {i+1} cross-validated"
             # Plot the colourized matrix
             ax.imshow(
                 confus_matrix_c[biomarker_order, :, :],
@@ -538,37 +593,6 @@ class OrdinalSustain(AbstractSustain):
 
         fig.tight_layout()
         return fig, ax
-
-
-    def subtype_and_stage_individuals_newData(self, prob_nl_new, prob_score_new, samples_sequence, samples_f, N_samples):
-
-        numBio_new                   = prob_nl_new.shape[1]
-        assert numBio_new == self.__sustainData.getNumBiomarkers(), "Number of biomarkers in new data should be same as in training data"
-
-        numStages = self.__sustainData.getNumStages()
-        
-        prob_score_new = prob_score_new.transpose(0,2,1)
-        prob_score_new = prob_score_new.reshape(prob_score_new.shape[0],prob_score_new.shape[1]*prob_score_new.shape[2])
-        prob_score_new = prob_score_new[:,self.IX_select[0,:]]
-        prob_score_new = prob_score_new.reshape(prob_nl_new.shape[0],self.stage_score.shape[1])
-
-        sustainData_newData             = OrdinalSustainData(prob_nl_new, prob_score_new, numStages)
-
-        ml_subtype,         \
-        prob_ml_subtype,    \
-        ml_stage,           \
-        prob_ml_stage,      \
-        prob_subtype,       \
-        prob_stage,         \
-        prob_subtype_stage          = self.subtype_and_stage_individuals(sustainData_newData, samples_sequence, samples_f, N_samples)
-
-        return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
-
-
-    # ********************* STATIC METHODS
-    @staticmethod
-    def linspace_local2(a, b, N, arange_N):
-        return a + (b - a) / (N - 1.) * arange_N
 
     # ********************* TEST METHODS
     @classmethod
