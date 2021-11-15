@@ -220,7 +220,15 @@ class AbstractSustain(ABC):
 
             # plot results
             if plot:
-                fig, ax = self._plot_sustain_model(samples_sequence, samples_f, n_samples, **kwargs)
+                fig, ax = self._plot_sustain_model(
+                    samples_sequence=samples_sequence,
+                    samples_f=samples_f,
+                    n_samples=n_samples,
+                    biomarker_labels=self.biomarker_labels,
+                    subtype_order=self._plot_subtype_order,
+                    biomarker_order=self._plot_biomarker_order,
+                    **kwargs
+                )
                 fig.savefig(Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.{plot_format}")
                 fig.show()
 
@@ -1038,10 +1046,12 @@ class AbstractSustain(ABC):
         pass
 
     @abstractmethod
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False,
-    subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10,
-    stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10,
-    label_rot=0, cmap=None, biomarker_colours=None, figsize=None):
+    def _plot_sustain_model():
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def plot_positional_var():
         pass
 
     @abstractmethod
