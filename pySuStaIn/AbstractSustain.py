@@ -401,7 +401,6 @@ class AbstractSustain(ABC):
         # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
         # so that you get more realistic estimates of variance within event positions within subtypes
 
-
         pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
 
         #*********** load ML sequence for full model for N_subtypes
@@ -487,9 +486,14 @@ class AbstractSustain(ABC):
         # order of biomarkers in each subtypes' positional variance diagram
         plot_biomarker_order                = ml_sequence_EM_full[plot_subtype_order[0], :].astype(int)
 
-        fig, ax                             = self._plot_sustain_model(
-            samples_sequence_cval, samples_f_cval, n_samples, cval=True,
-            subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12,
+        fig, ax = self._plot_sustain_model(
+            samples_sequence=samples_sequence_cval,
+            samples_f=samples_f_cval,
+            n_samples=n_samples,
+            cval=True,
+            biomarker_labels=self.biomarker_labels,
+            subtype_order=plot_subtype_order,
+            biomarker_order=plot_biomarker_order,
             **kwargs
         )
 
