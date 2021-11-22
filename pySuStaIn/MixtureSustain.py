@@ -447,7 +447,7 @@ class MixtureSustain(AbstractSustain):
             ax.set_title(title_i, fontsize=title_font_size)
 
         fig.tight_layout()
-        return fig, ax
+        return fig, axs
 
     def subtype_and_stage_individuals_newData(self, L_yes_new, L_no_new, samples_sequence, samples_f, N_samples):
 

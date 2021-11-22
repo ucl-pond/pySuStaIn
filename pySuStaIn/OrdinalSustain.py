@@ -592,7 +592,7 @@ class OrdinalSustain(AbstractSustain):
             ax.set_title(title_i, fontsize=title_font_size)
 
         fig.tight_layout()
-        return fig, ax
+        return fig, axs
 
     # ********************* TEST METHODS
     @classmethod
