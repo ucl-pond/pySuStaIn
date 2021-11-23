@@ -1,14 +1,23 @@
 ###
-# pySuStaIn: Python translation of Matlab version of SuStaIn algorithm (https://www.nature.com/articles/s41467-018-05892-0)
-# Author: Peter Wijeratne (p.wijeratne@ucl.ac.uk)
-# Contributors: Leon Aksman (l.aksman@ucl.ac.uk), Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
+# pySuStaIn: a Python implementation of the Subtype and Stage Inference (SuStaIn) algorithm
 #
-# For questions/comments related to: object orient implementation of pySustain
-# contact: Leon Aksman (l.aksman@ucl.ac.uk)
-# For questions/comments related to: the SuStaIn algorithm
-# contact: Alex Young (alexandra.young@kcl.ac.uk)
+# If you use pySuStaIn, please cite the following core papers:
+# 1. The original SuStaIn paper:    https://doi.org/10.1038/s41467-018-05892-0
+# 2. The pySuStaIn software paper:  https://doi.org/10.1016/j.softx.2021.100811
+#
+# Please also cite the corresponding progression pattern model you use:
+# 1. The piece-wise linear z-score model (i.e. ZscoreSustain):  https://doi.org/10.1038/s41467-018-05892-0
+# 2. The event-based model (i.e. MixtureSustain):               https://doi.org/10.1016/j.neuroimage.2012.01.062
+#    with Gaussian mixture modeling (i.e. 'mixture_gmm'):       https://doi.org/10.1093/brain/awu176
+#    or kernel density estimation (i.e. 'mixture_kde'):         https://doi.org/10.1002/alz.12083
+# 3. The model for discrete ordinal data (i.e. OrdinalSustain): https://doi.org/10.3389/frai.2021.613261
+#
+# Thanks a lot for supporting this project.
+#
+# Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -52,7 +61,7 @@ class OrdinalSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed):
+                 seed=None):
         # The initializer for the scored events model implementation of AbstractSustain
         # Parameters:
         #   prob_nl                     - probability of negative/normal class for all subjects across all biomarkers 
@@ -114,7 +123,7 @@ class OrdinalSustain(AbstractSustain):
                          seed)
 
 
-    def _initialise_sequence(self, sustainData):
+    def _initialise_sequence(self, sustainData, rng):
         # Randomly initialises a linear z-score model ensuring that the biomarkers
         # are monotonically increasing
         #
@@ -147,7 +156,7 @@ class OrdinalSustain(AbstractSustain):
 
             events                          = np.array(range(N))
             possible_events                 = np.array(events[IS_min_stage_score])
-            this_index                      = np.ceil(np.random.rand() * ((len(possible_events)))) - 1
+            this_index                      = np.ceil(rng.random() * ((len(possible_events)))) - 1
             S[i]                            = possible_events[int(this_index)]
 
         S                                   = S.reshape(1, len(S))
@@ -186,7 +195,7 @@ class OrdinalSustain(AbstractSustain):
 
         return p_perm_k
 
-    def _optimise_parameters(self, sustainData, S_init, f_init):
+    def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         # Optimise the parameters of the SuStaIn model
 
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
@@ -203,14 +212,17 @@ class OrdinalSustain(AbstractSustain):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        #p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        # adding 1e-250 fixes divide by zero problem that happens rarely
+        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
+
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
-        order_seq                           = np.random.permutation(N_S)  # this will produce different random numbers to Matlab
+        order_seq                           = rng.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
-            order_bio                       = np.random.permutation(N)  # this will produce different random numbers to Matlab
+            order_bio                       = rng.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence            = S_opt[s]
                 current_location            = np.array([0] * len(current_sequence))
@@ -311,9 +323,9 @@ class OrdinalSustain(AbstractSustain):
 
         for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if i > 0:
-                seq_order                   = np.random.permutation(N_S)  # this function returns different random numbers to Matlab
+                seq_order                   = self.global_rng.permutation(N_S)  # this function returns different random numbers to Matlab
                 for s in seq_order:
-                    move_event_from         = int(np.ceil(N * np.random.rand())) - 1
+                    move_event_from         = int(np.ceil(N * self.global_rng.random())) - 1
                     current_sequence        = samples_sequence[s, :, i - 1]
 
                     current_location        = np.array([0] * N)
@@ -358,7 +370,7 @@ class OrdinalSustain(AbstractSustain):
                     # use own normal PDF because stats.norm is slow
                     weight                  = AbstractSustain.calc_coeff(this_seq_sigma) * AbstractSustain.calc_exp(distance, 0., this_seq_sigma)
                     weight                  /= np.sum(weight)
-                    index                   = np.random.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
+                    index                   = self.global_rng.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
 
                     move_event_to           = possible_positions[index]
 
@@ -366,7 +378,7 @@ class OrdinalSustain(AbstractSustain):
                     new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
                     samples_sequence[s, :, i] = new_sequence
 
-                new_f                       = samples_f[:, i - 1] + f_sigma * np.random.randn()
+                new_f                       = samples_f[:, i - 1] + f_sigma * self.global_rng.standard_normal()
                 new_f                       = (np.fabs(new_f) / np.sum(np.fabs(new_f)))
                 samples_f[:, i]             = new_f
 
@@ -377,7 +389,7 @@ class OrdinalSustain(AbstractSustain):
 
             if i > 0:
                 ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
-                if ratio < np.random.rand():
+                if ratio < self.global_rng.random():
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
@@ -390,21 +402,26 @@ class OrdinalSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, plot_order=None, title_font_size=8):
+    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=8):
+
+        if subtype_order is None:
+            subtype_order                   = self._plot_subtype_order
+
+        #biomarker_order currently unused here
 
         colour_mat                          = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1]]) #, [0.5, 0, 1], [0, 1, 1]])
 
         temp_mean_f                         = np.mean(samples_f, 1)
         vals                                = np.sort(temp_mean_f)[::-1]
         vals                                = np.array([np.round(x * 100.) for x in vals]) / 100.
-        ix                                  = np.argsort(temp_mean_f)[::-1]
+        #ix                                  = np.argsort(temp_mean_f)[::-1]
 
         N_S                                 = samples_sequence.shape[0]
         N_bio                               = len(self.biomarker_labels)
 
         if N_S == 1:
             fig, ax                         = plt.subplots()
-            total_axes                      = 1;
+            total_axes                      = 1
         elif N_S < 3:
             fig, ax                         = plt.subplots(1, N_S)
             total_axes                      = N_S
@@ -422,7 +439,7 @@ class OrdinalSustain(AbstractSustain):
                 ax.flat[i].set_axis_off()
                 continue
 
-            this_samples_sequence           = samples_sequence[ix[i],:,:].T
+            this_samples_sequence           = samples_sequence[subtype_order[i],:,:].T
             markers                         = np.unique(self.stage_biomarker_index)
             N                               = this_samples_sequence.shape[1]
 

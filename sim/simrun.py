@@ -1,7 +1,21 @@
 ###
-# pySuStaIn: SuStaIn algorithm in Python (https://www.nature.com/articles/s41468-018-05892-0)
-# Authors: Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (l.aksman@ucl.ac.uk)
-# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk)
+# pySuStaIn: a Python implementation of the Subtype and Stage Inference (SuStaIn) algorithm
+#
+# If you use pySuStaIn, please cite the following core papers:
+# 1. The original SuStaIn paper:    https://doi.org/10.1038/s41467-018-05892-0
+# 2. The pySuStaIn software paper:  https://doi.org/10.1016/j.softx.2021.100811
+#
+# Please also cite the corresponding progression pattern model you use:
+# 1. The piece-wise linear z-score model (i.e. ZscoreSustain):  https://doi.org/10.1038/s41467-018-05892-0
+# 2. The event-based model (i.e. MixtureSustain):               https://doi.org/10.1016/j.neuroimage.2012.01.062
+#    with Gaussian mixture modeling (i.e. 'mixture_gmm'):       https://doi.org/10.1093/brain/awu176
+#    or kernel density estimation (i.e. 'mixture_kde'):         https://doi.org/10.1002/alz.12083
+# 3. The model for discrete ordinal data (i.e. OrdinalSustain): https://doi.org/10.3389/frai.2021.613261
+#
+# Thanks a lot for supporting this project.
+#
+# Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
 import numpy as np
 from matplotlib import pyplot as plt
@@ -13,8 +27,8 @@ import pandas as pd
 
 from simfuncs import *
 
-from mixture_model import fit_all_gmm_models, fit_all_kde_models
-import plotting
+from kde_ebm.mixture_model import fit_all_gmm_models, fit_all_kde_models
+from kde_ebm import plotting
 
 import warnings
 warnings.filterwarnings("ignore",category=cbook.mplDeprecation)
@@ -36,6 +50,9 @@ def main():
     # the fractions of the total number of subjects (M) belonging to each subtype
     ground_truth_fractions = np.array([0.5, 0.30, 0.20])
 
+    #create some generic biomarker names
+    BiomarkerNames           = ['Biomarker ' + str(i) for i in range(N)]
+
     #***************** parameters for SuStaIn-based inference of subtypes
     use_parallel_startpoints = True
 
@@ -43,22 +60,19 @@ def main():
     N_startpoints           = 25
     # maximum number of inferred subtypes - note that this could differ from N_S_ground_truth
     N_S_max                 = 4
-    N_iterations_MCMC       = int(1e5)  #For speed - you should use int(1e6) normally, but it can take a long time
+    N_iterations_MCMC       = int(1e5)  #Generally recommend either 1e5 or 1e6 (the latter may be slow though) in practice
+
+    #labels for plotting are biomarker names
+    SuStaInLabels           = BiomarkerNames
 
     # cross-validation
     validate                = True
-    N_folds                 = 10
+    N_folds                 = 3         #Set low to speed things up here, but generally recommend 10 in practice
 
     #either 'mixture_GMM' or 'mixture_KDE' or 'zscore'
     sustainType             = 'mixture_GMM'
 
     assert sustainType in ("mixture_GMM", "mixture_KDE", "zscore"), "sustainType should be either mixture_GMM, mixture_KDE or zscore"
-
-
-    SuStaInLabels           = []
-    for i in range(N):
-        SuStaInLabels.append('Biomarker ' + str(i))  # ['Biomarker 0', 'Biomarker 1', ..., 'Biomarker N' ]
-
 
     #****************** generate the ground-truth sequences and groud-truth data (i.e. subjects' biomarker measures)
     dataset_name            = 'sim'
@@ -100,7 +114,7 @@ def main():
         elif sustainType == "mixture_KDE":
             mixtures            = fit_all_kde_models(data, labels)
 
-        fig, ax                 = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels, plotting_font_size=20)
+        fig, ax                 = plotting.mixture_model_grid(data_case_control, labels_case_control, mixtures, SuStaInLabels)#, plotting_font_size=20)
         fig.show()
         fig.savefig(os.path.join(output_folder, 'kde_fits.png'))
 
@@ -161,7 +175,14 @@ def main():
     ground_truth_fractions_actual       = np.expand_dims(ground_truth_fractions_actual, axis=1)
     ground_truth_nsamples               = np.inf
 
-    fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, title_font_size=12)
+    #ordering of positional variance diagrams (PVDs)
+    plot_subtype_order      = np.arange(N_S_ground_truth)
+    #ordering of biomarkers in each PVD
+    plot_biomarker_order    = ground_truth_sequences[plot_subtype_order[0], :].astype(int).ravel()
+    #plot PVDs given subtype and biomarker ordering
+    fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, \
+                                                          subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12)
+    plt.suptitle('Ground truth sequences')
     fig.savefig(os.path.join(output_folder, 'PVD_true.png'))
     fig.show()
 
@@ -172,7 +193,7 @@ def main():
     prob_ml_subtype,    \
     ml_stage,           \
     prob_ml_stage,      \
-    prob_subtype_stage      = sustain.run_sustain_algorithm()
+    prob_subtype_stage      = sustain.run_sustain_algorithm(plot=True)
 
     #save the most likely subtype, the associated subtype probability,
     # the most likely stage and the associated stage probability for each subject
@@ -192,7 +213,7 @@ def main():
     X_hist                  = list()
     labels_hist             = list()
     for i in range(N_S_max):
-        X_hist.append(ml_subtype[ground_truth_subtypes==i])
+        X_hist.append(ml_subtype[ground_truth_subtypes==i].ravel())
         labels_hist.append('Subtype ' + str(i+1))
     plt.hist(X_hist, bins, label=labels_hist)
     plt.xticks(np.arange(0, N_S_ground_truth)+0.5, np.arange(1, N_S_ground_truth+1))

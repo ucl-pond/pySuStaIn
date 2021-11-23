@@ -8,14 +8,16 @@
 # For questions/comments related to: the SuStaIn algorithm
 # contact: Alex Young (alexandra.young@kcl.ac.uk)
 ###
+from tqdm.auto import tqdm
 import numpy as np
 from matplotlib import pyplot as plt
+from scipy.stats import norm
 
 from pySuStaIn.AbstractSustain import AbstractSustainData
 from pySuStaIn.AbstractSustain import AbstractSustain
 
 #*******************************************
-#The data structure class for ZscoreSustain and ZscoreSustainMissingData. It holds the z-scored data that gets passed around and re-indexed in places.
+#The data structure class for ZscoreSustainMissingData. It holds the z-scored data that gets passed around and re-indexed in places.
 class ZScoreSustainData(AbstractSustainData):
 
     def __init__(self, data, numStages):
@@ -49,7 +51,8 @@ class ZscoreSustainMissingData(AbstractSustain):
                  N_iterations_MCMC,
                  output_folder,
                  dataset_name,
-                 use_parallel_startpoints):
+                 use_parallel_startpoints,
+                 seed=None):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
         #   data                        - !important! needs to be (positive) z-scores!
@@ -66,6 +69,7 @@ class ZscoreSustainMissingData(AbstractSustain):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   seed                        - random number seed
 
         N                               = data.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -101,10 +105,11 @@ class ZscoreSustainMissingData(AbstractSustain):
                          N_iterations_MCMC,
                          output_folder,
                          dataset_name,
-                         use_parallel_startpoints)
+                         use_parallel_startpoints,
+                         seed)
 
 
-    def _initialise_sequence(self, sustainData):
+    def _initialise_sequence(self, sustainData, rng):
         # Randomly initialises a linear z-score model ensuring that the biomarkers
         # are monotonically increasing
         #
@@ -137,7 +142,7 @@ class ZscoreSustainMissingData(AbstractSustain):
 
             events                          = np.array(range(N))
             possible_events                 = np.array(events[IS_min_stage_zscore])
-            this_index                      = np.ceil(np.random.rand() * ((len(possible_events)))) - 1
+            this_index                      = np.ceil(rng.random() * ((len(possible_events)))) - 1
             S[i]                            = possible_events[int(this_index)]
 
         S                                   = S.reshape(1, len(S))
@@ -233,11 +238,10 @@ class ZscoreSustainMissingData(AbstractSustain):
 
             p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(p), 1) 
         p_perm_k                            = np.exp(p_perm_k)
-     
 
         return p_perm_k
 
-    def _optimise_parameters(self, sustainData, S_init, f_init):
+    def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         # Optimise the parameters of the SuStaIn model
 
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
@@ -254,14 +258,14 @@ class ZscoreSustainMissingData(AbstractSustain):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted, axis=(1,2), keepdims=True)
+        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
-        order_seq                           = np.random.permutation(N_S)  # this will produce different random numbers to Matlab
+        order_seq                           = rng.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
-            order_bio                       = np.random.permutation(N)  # this will produce different random numbers to Matlab
+            order_bio                       = rng.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence            = S_opt[s]
                 current_location            = np.array([0] * len(current_sequence))
@@ -315,7 +319,7 @@ class ZscoreSustainMissingData(AbstractSustain):
                     p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
                     total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
                     total_prob_subj         = np.sum(total_prob_stage, 1)
-                    possible_likelihood[index] = sum(np.log(total_prob_subj + 1e-250))
+                    possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
                 possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
                 max_likelihood              = max(possible_likelihood)
@@ -329,7 +333,7 @@ class ZscoreSustainMissingData(AbstractSustain):
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
         #p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
-        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted, axis=(1, 2), keepdims=True)
+        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
         
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
@@ -339,9 +343,10 @@ class ZscoreSustainMissingData(AbstractSustain):
         total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
-        likelihood_opt                      = sum(np.log(total_prob_subj + 1e-250))
+        likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
 
         return S_opt, f_opt, likelihood_opt
+
 
     def _perform_mcmc(self, sustainData, seq_init, f_init, n_iterations, seq_sigma, f_sigma):
         # Take MCMC samples of the uncertainty in the SuStaIn model parameters
@@ -358,13 +363,14 @@ class ZscoreSustainMissingData(AbstractSustain):
         samples_sequence[:, :, 0]           = seq_init  # don't need to copy as we don't write to 0 index
         samples_f[:, 0]                     = f_init
 
-        for i in range(n_iterations):
-            if i % (n_iterations / 10) == 0:
-                print('Iteration', i, 'of', n_iterations, ',', int(float(i) / float(n_iterations) * 100.), '% complete')
+        # Reduce frequency of tqdm update to 0.1% of total for larger iteration numbers
+        tqdm_update_iters = int(n_iterations/1000) if n_iterations > 100000 else None 
+
+        for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if i > 0:
-                seq_order                   = np.random.permutation(N_S)  # this function returns different random numbers to Matlab
+                seq_order                   = self.global_rng.permutation(N_S)  # this function returns different random numbers to Matlab
                 for s in seq_order:
-                    move_event_from         = int(np.ceil(N * np.random.rand())) - 1
+                    move_event_from         = int(np.ceil(N * self.global_rng.random())) - 1
                     current_sequence        = samples_sequence[s, :, i - 1]
 
                     current_location        = np.array([0] * N)
@@ -409,7 +415,7 @@ class ZscoreSustainMissingData(AbstractSustain):
                     # use own normal PDF because stats.norm is slow
                     weight                  = AbstractSustain.calc_coeff(this_seq_sigma) * AbstractSustain.calc_exp(distance, 0., this_seq_sigma)
                     weight                  /= np.sum(weight)
-                    index                   = np.random.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
+                    index                   = self.global_rng.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
 
                     move_event_to           = possible_positions[index]
 
@@ -417,7 +423,7 @@ class ZscoreSustainMissingData(AbstractSustain):
                     new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
                     samples_sequence[s, :, i] = new_sequence
 
-                new_f                       = samples_f[:, i - 1] + f_sigma * np.random.randn()
+                new_f                       = samples_f[:, i - 1] + f_sigma * self.global_rng.standard_normal()
                 new_f                       = (np.fabs(new_f) / np.sum(np.fabs(new_f)))
                 samples_f[:, i]             = new_f
 
@@ -428,7 +434,7 @@ class ZscoreSustainMissingData(AbstractSustain):
 
             if i > 0:
                 ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
-                if ratio < np.random.rand():
+                if ratio < self.global_rng.random():
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
@@ -569,3 +575,140 @@ class ZscoreSustainMissingData(AbstractSustain):
     def linspace_local2(a, b, N, arange_N):
         return a + (b - a) / (N - 1.) * arange_N
 
+    # ********************* TEST METHODS
+    @classmethod
+    def test_sustain(cls, n_biomarkers, n_samples, n_subtypes, 
+    ground_truth_subtypes, sustain_kwargs, seed=42):
+        # Set a global seed to propagate
+        np.random.seed(seed)
+        # Create Z values
+        Z_vals = np.tile(np.arange(1, 4), (n_biomarkers, 1))
+        Z_vals[0, 2] = 0
+
+        Z_max = np.full((n_biomarkers,), 5)
+        Z_max[2] = 2
+
+        ground_truth_sequences = cls.generate_random_model(Z_vals, n_subtypes)
+        N_stages = np.sum(Z_vals > 0) + 1
+
+        ground_truth_stages_control = np.zeros((int(np.round(n_samples * 0.25)), 1))
+        ground_truth_stages_other = np.random.randint(1, N_stages+1, (int(np.round(n_samples * 0.75)), 1))
+        ground_truth_stages = np.vstack((ground_truth_stages_control, ground_truth_stages_other)).astype(int)
+
+        data, data_denoised, stage_value = cls.generate_data(
+            ground_truth_subtypes,
+            ground_truth_stages,
+            ground_truth_sequences,
+            Z_vals,
+            Z_max
+        )
+
+        return cls(
+            data, Z_vals, Z_max,
+            **sustain_kwargs
+        )
+
+    @staticmethod
+    def generate_random_model(Z_vals, N_S, seed=None):
+        num_biomarkers = Z_vals.shape[0]
+
+        stage_zscore = Z_vals.T.flatten()#[np.newaxis, :]
+
+        IX_select = np.nonzero(stage_zscore)[0]
+        stage_zscore = stage_zscore[IX_select]#[np.newaxis, :]
+        num_zscores = Z_vals.shape[0]
+
+        stage_biomarker_index = np.tile(np.arange(num_biomarkers), (num_zscores,))
+        stage_biomarker_index = stage_biomarker_index[IX_select]#[np.newaxis, :]
+
+        N = stage_zscore.shape[0]
+        S = np.zeros((N_S, N))
+        # Moved outside loop, no need
+        possible_biomarkers = np.unique(stage_biomarker_index)
+
+        for s in range(N_S):
+            for i in range(N):
+
+                IS_min_stage_zscore = np.full(N, False)
+    
+                for j in possible_biomarkers:
+                    IS_unselected = np.full(N, False)
+                    # I have no idea what purpose this serves, so leaving for now
+                    for k in set(range(N)) - set(S[s][:i]):
+                        IS_unselected[k] = True
+
+                    this_biomarkers = np.logical_and(
+                        stage_biomarker_index == possible_biomarkers[j],
+                        np.array(IS_unselected) == 1
+                    )
+                    if not np.any(this_biomarkers):
+                        this_min_stage_zscore = 0
+                    else:
+                        this_min_stage_zscore = np.min(stage_zscore[this_biomarkers])
+                    
+                    if this_min_stage_zscore:
+                        IS_min_stage_zscore[np.logical_and(
+                            this_biomarkers,
+                            stage_zscore == this_min_stage_zscore
+                        )] = True
+
+                events = np.arange(N)
+                possible_events = events[IS_min_stage_zscore]
+                this_index = np.ceil(np.random.rand() * len(possible_events)) - 1
+                
+                S[s][i] = possible_events[int(this_index)]
+        return S
+
+    # TODO: Refactor this as above
+    @staticmethod
+    def generate_data(subtypes, stages, gt_ordering, Z_vals, Z_max):
+        B = Z_vals.shape[0]
+        stage_zscore = np.array([y for x in Z_vals.T for y in x])
+        stage_zscore = stage_zscore.reshape(1,len(stage_zscore))
+        IX_select = stage_zscore>0
+        stage_zscore = stage_zscore[IX_select]
+        stage_zscore = stage_zscore.reshape(1,len(stage_zscore))
+
+        num_zscores = Z_vals.shape[1]
+        IX_vals = np.array([[x for x in range(B)]] * num_zscores).T
+        stage_biomarker_index = np.array([y for x in IX_vals.T for y in x])
+        stage_biomarker_index = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+        stage_biomarker_index = stage_biomarker_index[IX_select]
+        stage_biomarker_index = stage_biomarker_index.reshape(1,len(stage_biomarker_index))
+
+        min_biomarker_zscore = [0]*B
+        max_biomarker_zscore = Z_max
+        std_biomarker_zscore = [1]*B
+
+        N = stage_biomarker_index.shape[1]
+        N_S = gt_ordering.shape[0]
+
+        possible_biomarkers = np.unique(stage_biomarker_index)
+        stage_value = np.zeros((B,N+2,N_S))
+
+        for s in range(N_S):
+            S = gt_ordering[s,:]
+            S_inv = np.array([0]*N)
+            S_inv[S.astype(int)] = np.arange(N)
+            for i in range(B):
+                b = possible_biomarkers[i]
+                event_location = np.concatenate([[0], S_inv[(stage_biomarker_index == b)[0]], [N]])
+
+                event_value = np.concatenate([[min_biomarker_zscore[i]], stage_zscore[stage_biomarker_index == b], [max_biomarker_zscore[i]]])
+
+                for j in range(len(event_location)-1):
+
+                    if j == 0: # FIXME: nasty hack to get Matlab indexing to match up - necessary here because indices are used for linspace limits
+                        index = np.arange(event_location[j],event_location[j+1]+2)
+                        stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+2)
+                    else:
+                        index = np.arange(event_location[j] + 1, event_location[j + 1] + 2)
+                        stage_value[i,index,s] = np.linspace(event_value[j],event_value[j+1],event_location[j+1]-event_location[j]+1)
+
+        M = stages.shape[0]
+        data_denoised = np.zeros((M,B))
+        for m in range(M):
+            data_denoised[m,:] = stage_value[:,int(stages[m]),subtypes[m]]
+        data = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
+
+        return data, data_denoised, stage_value
