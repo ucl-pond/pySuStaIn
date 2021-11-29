@@ -471,7 +471,7 @@ class ZscoreSustain(AbstractSustain):
         return a + (b - a) / (N - 1.) * arange_N
 
     @staticmethod
-    def plot_positional_var(samples_sequence, samples_f, n_samples, Z_vals, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None, separate_subtypes=False):
+    def plot_positional_var(samples_sequence, samples_f, n_samples, Z_vals, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None, separate_subtypes=False, save_path=None, save_kwargs={}):
         # Get the number of subtypes
         N_S = samples_sequence.shape[0]
         # Get the number of features/biomarkers
@@ -642,7 +642,19 @@ class ZscoreSustain(AbstractSustain):
                 ax.set_title(title_i, fontsize=title_font_size)
             # Tighten up the figure
             fig.tight_layout()
-
+            # Save if a path is given
+            if save_path is not None:
+                # Modify path for specific subtype if specified
+                # Don't modify save_path!
+                if separate_subtypes:
+                    save_name = f"{save_path}_subtype{i}"
+                else:
+                    save_name = save_path
+                # Save the figure, with additional kwargs
+                fig.savefig(
+                    save_name,
+                    **save_kwargs
+                )
         return figs, axs
 
     # ********************* TEST METHODS
