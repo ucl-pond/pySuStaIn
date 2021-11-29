@@ -451,9 +451,9 @@ class OrdinalSustain(AbstractSustain):
             # Determine order if info given
             if ml_f_EM is not None:
                 subtype_order = np.argsort(ml_f_EM)[::-1]
-            # Otherwise use dummy ordering
+            # Otherwise determine order from samples_f
             else:
-                subtype_order = np.arange(N_S)
+                subtype_order = np.argsort(np.mean(samples_f, 1))[::-1]
         # Unravel the stage scores from score_vals
         stage_score = score_vals.T.flatten()
         IX_select = np.nonzero(stage_score)[0]

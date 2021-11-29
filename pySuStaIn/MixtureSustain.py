@@ -342,9 +342,9 @@ class MixtureSustain(AbstractSustain):
             # Determine order if info given
             if ml_f_EM is not None:
                 subtype_order = np.argsort(ml_f_EM)[::-1]
-            # Otherwise use dummy ordering
+            # Otherwise determine order from samples_f
             else:
-                subtype_order = np.arange(N_S)
+                subtype_order = np.argsort(np.mean(samples_f, 1))[::-1]
         # Warn user of reordering if labels and order given
         if biomarker_labels is not None and biomarker_order is not None:
             warnings.warn(
