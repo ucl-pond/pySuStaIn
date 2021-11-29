@@ -474,9 +474,9 @@ class ZscoreSustainMissingData(AbstractSustain):
         return a + (b - a) / (N - 1.) * arange_N
 
     @staticmethod
-    def plot_positional_var():
+    def plot_positional_var(*args, **kwargs):
         # TODO: ZscoreMissing should be a child of Zscore
-        pass
+        return ZscoreSustain.plot_positional_var(*args, **kwargs)
 
     # ********************* TEST METHODS
     @classmethod
