@@ -616,10 +616,16 @@ class OrdinalSustain(AbstractSustain):
                 if separate_subtypes:
                     save_name = f"{save_path}_subtype{i}"
                 else:
-                    save_name = save_path
+                    save_name = f"{save_path}_all-subtypes"
+                # Handle file format, avoids issue with . in filenames
+                if "format" in save_kwargs:
+                    file_format = save_kwargs.pop("format")
+                # Default to png
+                else:
+                    file_format = "png"
                 # Save the figure, with additional kwargs
                 fig.savefig(
-                    save_name,
+                    f"{save_name}.{file_format}",
                     **save_kwargs
                 )
         return fig, axs
