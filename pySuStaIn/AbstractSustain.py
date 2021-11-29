@@ -220,17 +220,18 @@ class AbstractSustain(ABC):
 
             # plot results
             if plot:
-                fig, ax = self._plot_sustain_model(
+                figs, ax = self._plot_sustain_model(
                     samples_sequence=samples_sequence,
                     samples_f=samples_f,
                     n_samples=n_samples,
                     biomarker_labels=self.biomarker_labels,
                     subtype_order=self._plot_subtype_order,
                     biomarker_order=self._plot_biomarker_order,
+                    save_path=Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.{plot_format}",
                     **kwargs
                 )
-                fig.savefig(Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.{plot_format}")
-                fig.show()
+                for fig in figs:
+                    fig.show()
 
                 ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
 
@@ -486,7 +487,7 @@ class AbstractSustain(ABC):
         # order of biomarkers in each subtypes' positional variance diagram
         plot_biomarker_order                = ml_sequence_EM_full[plot_subtype_order[0], :].astype(int)
 
-        fig, ax = self._plot_sustain_model(
+        figs, ax = self._plot_sustain_model(
             samples_sequence=samples_sequence_cval,
             samples_f=samples_f_cval,
             n_samples=n_samples,
@@ -496,15 +497,29 @@ class AbstractSustain(ABC):
             biomarker_order=plot_biomarker_order,
             **kwargs
         )
-
-        # save and show this figure after all subtypes have been calculcated
-        plot_fname = Path(
-            self.output_folder
-        ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.{plot_format}"
-
-        #ax.legend(loc='upper right')
-        fig.savefig(plot_fname, bbox_inches='tight')
-        fig.show()
+        # If saving is being done here
+        if "save_path" not in kwargs:
+            # Handle separated subtypes
+            if len(figs) > 1:
+                # Loop over each figure/subtype
+                for num_subtype, fig in zip(range(N_subtypes), figs):
+                    # Nice confusing filename
+                    plot_fname = Path(
+                        self.output_folder
+                    ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_subtype{num_subtype}-separated_PVD_{N_folds}fold_CV.{plot_format}"
+                    # Save the figure
+                    fig.savefig(plot_fname, bbox_inches='tight')
+                    fig.show()
+            # Otherwise default single plot
+            else:
+                fig = figs[0]
+                # save and show this figure after all subtypes have been calculcated
+                plot_fname = Path(
+                    self.output_folder
+                ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.{plot_format}"
+                # Save the figure
+                fig.savefig(plot_fname, bbox_inches='tight')
+                fig.show()
 
         #return samples_sequence_cval, samples_f_cval, kendalls_tau_mat, f_mat #samples_sequence_cval
 
