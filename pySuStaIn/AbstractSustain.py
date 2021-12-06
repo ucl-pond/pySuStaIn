@@ -230,11 +230,8 @@ class AbstractSustain(ABC):
                     save_path=Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.{plot_format}",
                     **kwargs
                 )
-                if isinstance(figs, list):
-                    for fig in figs:
-                        fig.show()
-                else:
-                    figs.show()
+                for fig in figs:
+                    fig.show()
 
                 ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
 

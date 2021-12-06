@@ -628,7 +628,7 @@ class OrdinalSustain(AbstractSustain):
                     f"{save_name}.{file_format}",
                     **save_kwargs
                 )
-        return fig, axs
+        return figs, axs
 
     # ********************* TEST METHODS
     @classmethod

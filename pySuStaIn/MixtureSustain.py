@@ -483,7 +483,7 @@ class MixtureSustain(AbstractSustain):
                     f"{save_name}.{file_format}",
                     **save_kwargs
                 )
-        return fig, axs
+        return figs, axs
 
     def subtype_and_stage_individuals_newData(self, L_yes_new, L_no_new, samples_sequence, samples_f, N_samples):
 
