@@ -23,6 +23,7 @@ from tqdm.auto import tqdm
 import numpy as np
 import scipy.stats as stats
 from matplotlib import pyplot as plt
+import matplotlib.colors as mcolors
 from pathlib import Path
 import pickle
 import csv
@@ -116,7 +117,7 @@ class AbstractSustain(ABC):
             self.pool                   = pathos.serial.SerialPool()
 
     #********************* PUBLIC METHODS
-    def run_sustain_algorithm(self, plot=False):
+    def run_sustain_algorithm(self, plot=False, plot_format="png", **kwargs):
         # Externally called method to start the SuStaIn algorithm after initializing the SuStaIn class object properly
 
         ml_sequence_prev_EM                 = []
@@ -219,9 +220,18 @@ class AbstractSustain(ABC):
 
             # plot results
             if plot:
-                fig, ax                         = self._plot_sustain_model(samples_sequence, samples_f, n_samples, title_font_size=12)
-                fig.savefig(Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.png")
-                fig.show()
+                figs, ax = self._plot_sustain_model(
+                    samples_sequence=samples_sequence,
+                    samples_f=samples_f,
+                    n_samples=n_samples,
+                    biomarker_labels=self.biomarker_labels,
+                    subtype_order=self._plot_subtype_order,
+                    biomarker_order=self._plot_biomarker_order,
+                    save_path=Path(self.output_folder) / f"{self.dataset_name}_subtype{s}_PVD.{plot_format}",
+                    **kwargs
+                )
+                for fig in figs:
+                    fig.show()
 
                 ax0.plot(range(self.N_iterations_MCMC), samples_likelihood, label="Subtype " + str(s+1))
 
@@ -229,7 +239,7 @@ class AbstractSustain(ABC):
         if plot:
             ax0.legend(loc='upper right')
             fig0.tight_layout()
-            fig0.savefig(Path(self.output_folder) / "MCMC_likelihoods.png", bbox_inches='tight')
+            fig0.savefig(Path(self.output_folder) / f"MCMC_likelihoods.{plot_format}", bbox_inches='tight')
             fig0.show()
 
         return samples_sequence, samples_f, ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype_stage
@@ -318,9 +328,9 @@ class AbstractSustain(ABC):
                     samples_sequence,       \
                     samples_f,              \
                     samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_test, seq_init, f_init)
-               
+
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
-                 
+
                     mean_likelihood_subj_test    = np.mean(samples_likelihood_subj_test,axis=1)
 
                     ml_sequence_prev_EM         = ml_sequence_EM
@@ -388,10 +398,9 @@ class AbstractSustain(ABC):
         return CVIC, loglike_matrix
 
 
-    def combine_cross_validated_sequences(self, N_subtypes, N_folds):
+    def combine_cross_validated_sequences(self, N_subtypes, N_folds, plot_format="png", **kwargs):
         # Combine MCMC sequences across cross-validation folds to get cross-validated positional variance diagrams,
         # so that you get more realistic estimates of variance within event positions within subtypes
-
 
         pickle_dir                          = os.path.join(self.output_folder, 'pickle_files')
 
@@ -449,8 +458,8 @@ class AbstractSustain(ABC):
             # 4. Find the order in which this fold's subtypes first appear in the sorted list
             corr_mat                        = np.zeros((N_subtypes, N_subtypes))
             for j in range(N_subtypes):
-               for k in range(N_subtypes):
-                   corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
+                for k in range(N_subtypes):
+                    corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
             set_full                        = []
             set_fold_i                      = []
             i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
@@ -478,16 +487,39 @@ class AbstractSustain(ABC):
         # order of biomarkers in each subtypes' positional variance diagram
         plot_biomarker_order                = ml_sequence_EM_full[plot_subtype_order[0], :].astype(int)
 
-        fig, ax                             = self._plot_sustain_model(samples_sequence_cval, samples_f_cval, n_samples, cval=True,
-                                                                       subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12)
-
-        # save and show this figure after all subtypes have been calculcated
-        png_filename                        = Path(self.output_folder) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.png"
-
-        #ax.legend(loc='upper right')
-        fig.savefig(png_filename, bbox_inches='tight')
-        fig.show()
-
+        figs, ax = self._plot_sustain_model(
+            samples_sequence=samples_sequence_cval,
+            samples_f=samples_f_cval,
+            n_samples=n_samples,
+            cval=True,
+            biomarker_labels=self.biomarker_labels,
+            subtype_order=plot_subtype_order,
+            biomarker_order=plot_biomarker_order,
+            **kwargs
+        )
+        # If saving is being done here
+        if "save_path" not in kwargs:
+            # Handle separated subtypes
+            if len(figs) > 1:
+                # Loop over each figure/subtype
+                for num_subtype, fig in zip(range(N_subtypes), figs):
+                    # Nice confusing filename
+                    plot_fname = Path(
+                        self.output_folder
+                    ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_subtype{num_subtype}-separated_PVD_{N_folds}fold_CV.{plot_format}"
+                    # Save the figure
+                    fig.savefig(plot_fname, bbox_inches='tight')
+                    fig.show()
+            # Otherwise default single plot
+            else:
+                fig = figs[0]
+                # save and show this figure after all subtypes have been calculcated
+                plot_fname = Path(
+                    self.output_folder
+                ) / f"{self.dataset_name}_subtype{N_subtypes - 1}_PVD_{N_folds}fold_CV.{plot_format}"
+                # Save the figure
+                fig.savefig(plot_fname, bbox_inches='tight')
+                fig.show()
 
         #return samples_sequence_cval, samples_f_cval, kendalls_tau_mat, f_mat #samples_sequence_cval
 
@@ -1033,7 +1065,12 @@ class AbstractSustain(ABC):
         pass
 
     @abstractmethod
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=10):
+    def _plot_sustain_model():
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def plot_positional_var():
         pass
 
     @abstractmethod
@@ -1049,6 +1086,28 @@ class AbstractSustain(ABC):
     def calc_exp(x, mu, sig):
         x = (x - mu) / sig
         return np.exp(-.5 * x * x)
+
+    @staticmethod
+    def check_biomarker_colours(biomarker_colours, biomarker_labels):
+        if isinstance(biomarker_colours, dict):
+            # Check each label exists
+            assert all(i in biomarker_labels for i in biomarker_colours.keys()), "A label doesn't match!"
+            # Check each colour exists
+            assert all(mcolors.is_color_like(i) for i in biomarker_colours.values()), "A proper colour wasn't given!"
+            # Add in any colours that aren't defined, allowing for partial colouration
+            for label in biomarker_labels:
+                if label not in biomarker_colours:
+                    biomarker_colours[label] = "black"
+        elif isinstance(biomarker_colours, (list, tuple)):
+            # Check each colour exists
+            assert all(mcolors.is_color_like(i) for i in biomarker_colours), "A proper colour wasn't given!"
+            # Check right number of colours given
+            assert len(biomarker_colours) == len(biomarker_labels), "The number of colours and labels do not match!"
+            # Turn list of colours into a label:colour mapping
+            biomarker_colours = {k:v for k,v in zip(biomarker_labels, biomarker_colours)}
+        else:
+            raise TypeError("A dictionary mapping label:colour or list/tuple of colours must be given!")
+        return biomarker_colours
 
     # ********************* TEST METHODS
     @staticmethod
