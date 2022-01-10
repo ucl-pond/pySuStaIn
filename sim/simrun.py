@@ -180,11 +180,11 @@ def main():
     #ordering of biomarkers in each PVD
     plot_biomarker_order    = ground_truth_sequences[plot_subtype_order[0], :].astype(int).ravel()
     #plot PVDs given subtype and biomarker ordering
-    fig, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, \
+    figs, ax                 = sustain._plot_sustain_model(ground_truth_sequences, ground_truth_fractions_actual, ground_truth_nsamples, \
                                                           subtype_order=plot_subtype_order, biomarker_order=plot_biomarker_order, title_font_size=12)
-    fig.suptitle('Ground truth sequences')
-    fig.savefig(os.path.join(output_folder, 'PVD_true.png'))
-    fig.show()
+    figs[0].suptitle('Ground truth sequences')
+    figs[0].savefig(os.path.join(output_folder, 'PVD_true.png'))
+    figs[0].show()
 
     #************* run SuStaIn to infer subtype sequences and subjects' subtypes/stages estimates
     samples_sequence,   \
