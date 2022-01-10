@@ -17,6 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
+from multiprocessing import Value
 import warnings
 from tqdm.auto import tqdm
 import numpy as np
@@ -494,6 +495,9 @@ class ZscoreSustain(AbstractSustain):
         # Get the z-scores and their number
         zvalues = np.unique(stage_zscore)
         N_z = len(zvalues)
+        # Extract which biomarkers have which zscores/stages
+        stage_biomarker_index = np.tile(np.arange(N_bio), (N_z,))
+        stage_biomarker_index = stage_biomarker_index[IX_select]
         # Warn user of reordering if labels and order given
         if biomarker_labels is not None and biomarker_order is not None:
             warnings.warn(
@@ -603,8 +607,13 @@ class ZscoreSustain(AbstractSustain):
                     # Extract the uncertainties for this z-score
                     confus_matrix_zscore = confus_matrix[(stage_zscore==z)[0]]
                     # Subtract the certainty for this colour
-                    confus_matrix_c[:, :, alter_level] -= np.tile(
-                        confus_matrix_zscore.reshape(N_bio, N, 1),
+                    confus_matrix_c[
+                        np.ix_(
+                            stage_biomarker_index[(stage_zscore==z)[0]], range(N),
+                            alter_level
+                        )
+                    ] -= np.tile(
+                        confus_matrix_zscore.reshape((stage_zscore==z).sum(), N, 1),
                         (1, 1, alter_level.sum())
                     )
                 # Add axis title

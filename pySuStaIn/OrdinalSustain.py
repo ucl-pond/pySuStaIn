@@ -458,9 +458,12 @@ class OrdinalSustain(AbstractSustain):
         stage_score = score_vals.T.flatten()
         IX_select = np.nonzero(stage_score)[0]
         stage_score = stage_score[IX_select][None, :]
-        # Get the z-scores and their number
+        # Get the scores and their number
         num_scores = np.unique(stage_score)
         N_z = len(num_scores)
+        # Extract which biomarkers have which zscores/stages
+        stage_biomarker_index = np.tile(np.arange(N_bio), (N_z,))
+        stage_biomarker_index = stage_biomarker_index[IX_select]
         # Warn user of reordering if labels and order given
         if biomarker_labels is not None and biomarker_order is not None:
             warnings.warn(
@@ -567,8 +570,18 @@ class OrdinalSustain(AbstractSustain):
                     # I.e. red (1,0,0) means removing green & blue channels
                     # according to the certainty of red (representing z-score 1)
                     alter_level = colour_mat[j] == 0
-                    # Extract the uncertainties for this z-score
+                    # Extract the uncertainties for this score
                     confus_matrix_score = confus_matrix[(stage_score==z)[0]]
+                    # Subtract the certainty for this colour
+                    confus_matrix_c[
+                        np.ix_(
+                            stage_biomarker_index[(stage_score==z)[0]], range(N),
+                            alter_level
+                        )
+                    ] -= np.tile(
+                        confus_matrix_score.reshape((stage_score==z).sum(), N, 1),
+                        (1, 1, alter_level.sum())
+                    )
                     # Subtract the certainty for this colour
                     confus_matrix_c[:, :, alter_level] -= np.tile(
                         confus_matrix_score.reshape(N_bio, N, 1),
