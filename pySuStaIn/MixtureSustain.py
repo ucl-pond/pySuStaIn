@@ -425,7 +425,9 @@ class MixtureSustain(AbstractSustain):
                 # Add axis title
                 if cval == False:
                     temp_mean_f = np.mean(samples_f, 1)
-                    vals = np.sort(temp_mean_f)[::-1]
+                    # Shuffle vals according to subtype_order
+                    # This defaults to previous method if custom order not given
+                    vals = temp_mean_f[subtype_order]
 
                     if n_samples != np.inf:
                         title_i = f"Subtype {i+1} (f={vals[i]:.2f}, n={np.round(vals[i] * n_samples):n})"
