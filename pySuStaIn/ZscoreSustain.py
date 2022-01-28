@@ -488,6 +488,8 @@ class ZscoreSustain(AbstractSustain):
             # Otherwise determine order from samples_f
             else:
                 subtype_order = np.argsort(np.mean(samples_f, 1))[::-1]
+        elif isinstance(subtype_order, tuple):
+            subtype_order = list(subtype_order)
         # Unravel the stage zscores from Z_vals
         stage_zscore = Z_vals.T.flatten()
         IX_select = np.nonzero(stage_zscore)[0]
