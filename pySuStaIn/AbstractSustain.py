@@ -363,15 +363,17 @@ class AbstractSustain(ABC):
 
         if plot:
             import pandas as pd
-            import pylab
-            df_loglike                                 = pd.DataFrame(data = loglike_matrix, columns = ["Subtype " + str(i+1) for i in range(self.N_S_max)])
-            df_loglike.boxplot(grid=False, fontsize=15)
+            fig, ax = plt.subplots()
+
+            df_loglike = pd.DataFrame(data = loglike_matrix, columns = ["Subtype " + str(i+1) for i in range(self.N_S_max)])
+            df_loglike.boxplot(grid=False, ax=ax, fontsize=15)
             for i in range(self.N_S_max):
-                y                                   = df_loglike[["Subtype " + str(i+1)]]
-                x                                   = np.random.normal(1+i, 0.04, size=len(y)) # Add some random "jitter" to the x-axis
-                pylab.plot(x, y, 'r.', alpha=0.2)
-            pylab.savefig(Path(self.output_folder) / 'Log_likelihoods_cv_folds.png')
-            pylab.show()
+                y = df_loglike[["Subtype " + str(i+1)]]
+                # Add some random "jitter" to the x-axis
+                x = np.random.normal(1+i, 0.04, size=len(y))
+                ax.plot(x, y.values, 'r.', alpha=0.2)
+            fig.savefig(Path(self.output_folder) / 'Log_likelihoods_cv_folds.png')
+            fig.show()
 
         CVIC                            = np.zeros(self.N_S_max)
 
