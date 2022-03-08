@@ -17,6 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
+from pathlib import Path
 import warnings
 from tqdm.auto import tqdm
 import numpy as np
@@ -469,9 +470,9 @@ class MixtureSustain(AbstractSustain):
                 # Modify path for specific subtype if specified
                 # Don't modify save_path!
                 if separate_subtypes:
-                    save_name = f"{save_path}_subtype{i}"
+                    save_name = Path(save_path) / f"_subtype{i}"
                 else:
-                    save_name = f"{save_path}_all-subtypes"
+                    save_name = Path(save_path) / f"_all-subtypes"
                 # Handle file format, avoids issue with . in filenames
                 if "format" in save_kwargs:
                     file_format = save_kwargs.pop("format")
