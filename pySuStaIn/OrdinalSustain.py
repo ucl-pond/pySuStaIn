@@ -615,9 +615,9 @@ class OrdinalSustain(AbstractSustain):
                 # Modify path for specific subtype if specified
                 # Don't modify save_path!
                 if separate_subtypes:
-                    save_name = Path(save_path) / f"_subtype{i}"
+                    save_name = Path(save_path) / f"pvd_subtype{i}"
                 else:
-                    save_name = Path(save_path) / f"_all-subtypes"
+                    save_name = Path(save_path) / f"pvd_all-subtypes"
                 # Handle file format, avoids issue with . in filenames
                 if "format" in save_kwargs:
                     file_format = save_kwargs.pop("format")
