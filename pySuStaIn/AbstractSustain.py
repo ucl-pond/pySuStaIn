@@ -327,7 +327,7 @@ class AbstractSustain(ABC):
                     ml_likelihood,          \
                     samples_sequence,       \
                     samples_f,              \
-                    samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_test, seq_init, f_init)
+                    samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_train, seq_init, f_init)
 
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
 
