@@ -17,6 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
+import warnings
 from tqdm.auto import tqdm
 import numpy as np
 import scipy.stats as stats
@@ -106,7 +107,7 @@ class MixtureSustain(AbstractSustain):
 
     def _calculate_likelihood_stage(self, sustainData, S):
         '''
-         Computes the likelihood of a single event based model
+        Computes the likelihood of a single event based model
 
         Inputs:
         =======
@@ -322,108 +323,169 @@ class MixtureSustain(AbstractSustain):
 
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
-    def _plot_sustain_model(self, samples_sequence, samples_f, n_samples, cval=False, subtype_order=None, biomarker_order=None, title_font_size=10):
+    def _plot_sustain_model(self, *args, **kwargs):
+        return MixtureSustain.plot_positional_var(*args, **kwargs)
 
-        temp_mean_f                         = np.mean(samples_f, 1)
-        vals                                = np.sort(temp_mean_f)[::-1]
-        vals                                = np.array([np.round(x * 100.) for x in vals]) / 100.
-        # ix                                  = np.argsort(temp_mean_f)[::-1]
 
+    # ********************* STATIC METHODS
+    @staticmethod
+    def plot_positional_var(samples_sequence, samples_f, n_samples, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label="Event Position", stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="Oranges", biomarker_colours=None, figsize=None, separate_subtypes=False, save_path=None, save_kwargs={}):
+        # Get the number of subtypes
+        N_S = samples_sequence.shape[0]
+        # Get the number of features/biomarkers
+        N_bio = samples_sequence.shape[1]
+        # Check that the number of labels given match
+        if biomarker_labels is not None:
+            assert len(biomarker_labels) == N_bio
+        # Set subtype order if not given
         if subtype_order is None:
-            subtype_order                   = self._plot_subtype_order
-
-        if biomarker_order is None:
-            biomarker_order                 = self._plot_biomarker_order #samples_sequence[ix[0], :, samples_sequence.shape[2]-1].astype(int)
-
-        biomarker_labels_plot_order         = [self.biomarker_labels[i].replace('_', ' ') for i in biomarker_order]
-
-
-        N_S                                 = samples_sequence.shape[0]
-        N_bio                               = len(self.biomarker_labels)
-
-        N_stages                            = samples_sequence.shape[1]
-        N_MCMC_samples                      = samples_sequence.shape[2]
-        
-        confus_matrix_plotting              = np.zeros((N_stages, N_stages, N_S))
-
-        if N_S == 1:
-            fig, ax                         = plt.subplots()
-            total_axes                      = 1
-        elif N_S < 3:
-            fig, ax                         = plt.subplots(1, N_S)
-            total_axes                      = N_S
-        elif N_S < 7:
-            fig, ax                         = plt.subplots(2, int(np.ceil(N_S / 2)))
-            total_axes                      = 2 * int(np.ceil(N_S / 2))
-        else:
-            fig, ax                         = plt.subplots(3, int(np.ceil(N_S / 3)))
-            total_axes                      = 3 * int(np.ceil(N_S / 3))
-
-        for i in range(total_axes):        #for i in range(N_S):
-
-            if i not in range(N_S):
-                ax.flat[i].set_axis_off()
-                continue
-
-            this_samples_sequence           = samples_sequence[subtype_order[i],:,:].T
-		        	
-            N                               = this_samples_sequence.shape[1]
-
-            confus_matrix                   = np.zeros((N, N))
-            for j in range(N):
-                confus_matrix[j, :]         = sum(this_samples_sequence == j)
-            confus_matrix                   /= N_MCMC_samples #float(max(this_samples_sequence.shape))
-
-            out_mat_i                       = np.tile(1 - confus_matrix[biomarker_order,:].reshape(N, N, 1), (1,1,3))
-
-            TITLE_FONT_SIZE                 = title_font_size
-            X_FONT_SIZE                     = 10 #8
-            Y_FONT_SIZE                     = 10 #7
-
-            if cval == False:                
-                if n_samples != np.inf:
-                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i])  + r', n=' + str(int(np.round(vals[i] * n_samples)))  + ')'
-                else:
-                    title_i                 = 'Subtype ' + str(i+1) + ' (f=' + str(vals[i]) + ')'
+            # Determine order if info given
+            if ml_f_EM is not None:
+                subtype_order = np.argsort(ml_f_EM)[::-1]
+            # Otherwise determine order from samples_f
             else:
-                title_i                     = 'Subtype ' + str(i+1) + ' cross-validated'
+                subtype_order = np.argsort(np.mean(samples_f, 1))[::-1]
+        # Warn user of reordering if labels and order given
+        if biomarker_labels is not None and biomarker_order is not None:
+            warnings.warn(
+                "Both labels and an order have been given. The labels will be reordered according to the given order!"
+            )
+        # Use default order if none given
+        if biomarker_order is None:
+            biomarker_order = np.arange(N_bio)
+        # If no labels given, set dummy defaults
+        if biomarker_labels is None:
+            biomarker_labels = [f"Biomarker {i}" for i in range(N_bio)]
+        # Otherwise reorder according to given order (or not if not given)
+        else:
+            biomarker_labels = [biomarker_labels[i] for i in biomarker_order]
 
-            if N_S > 1:
-                ax_i                        = ax.flat[i] #ax[i]
-                ax_i.imshow(out_mat_i, interpolation='nearest')      #, cmap=plt.cm.Blues)
-                ax_i.set_xticks(np.arange(N))
-                ax_i.set_xticklabels(range(1, N+1), fontsize=X_FONT_SIZE) #rotation=45,
+        # Check biomarker label colours
+        # If custom biomarker text colours are given
+        if biomarker_colours is not None:
+            biomarker_colours = AbstractSustain.check_biomarker_colours(
+            biomarker_colours, biomarker_labels
+        )
+        # Default case of all-black colours
+        # Unnecessary, but skips a check later
+        else:
+            biomarker_colours = {i:"black" for i in biomarker_labels}
 
-                ax_i.set_yticks(np.arange(N_bio))
-                ax_i.set_yticklabels([]) #['']* N_bio)
-                if i == 0:
-                    ax_i.set_yticklabels(np.array(biomarker_labels_plot_order, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)      #rotation=30, ha='right', rotation_mode='anchor'
-                    for tick in ax_i.yaxis.get_major_ticks():
-                        tick.label.set_color('black')
+        # Flag to plot subtypes separately
+        if separate_subtypes:
+            nrows, ncols = 1, 1
+        else:
+            # Determine number of rows and columns (rounded up)
+            if N_S == 1:
+                nrows, ncols = 1, 1
+            elif N_S < 3:
+                nrows, ncols = 1, N_S
+            elif N_S < 7:
+                nrows, ncols = 2, int(np.ceil(N_S / 2))
+            else:
+                nrows, ncols = 3, int(np.ceil(N_S / 3))
+        # Total axes used to loop over
+        total_axes = nrows * ncols
+        # Create list of single figure object if not separated
+        if separate_subtypes:
+            subtype_loops = N_S
+        else:
+            subtype_loops = 1
+        # Container for all figure objects
+        figs = []
+        # Loop over figures (only makes a diff if separate_subtypes=True)
+        for i in range(subtype_loops):
+            # Create the figure and axis for this subtype loop
+            fig, axs = plt.subplots(nrows, ncols, figsize=figsize)
+            figs.append(fig)
+            # Loop over each axis
+            for j in range(total_axes):
+                # Normal functionality (all subtypes on one plot)
+                if not separate_subtypes:
+                    i = j
+                # Handle case of a single array
+                if isinstance(axs, np.ndarray):
+                    ax = axs.flat[i]
+                else:
+                    ax = axs
+                # Turn off axes from rounding up
+                if i not in range(N_S):
+                    ax.set_axis_off()
+                    continue
 
-                ax_i.set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax_i.set_title(title_i, fontsize=TITLE_FONT_SIZE)
+                this_samples_sequence = samples_sequence[subtype_order[i],:,:].T
+                N = this_samples_sequence.shape[1]
 
-            else: #**** one subtype
-                ax.imshow(out_mat_i) #, interpolation='nearest')#, cmap=plt.cm.Blues) #[...,::-1]
-                ax.set_xticks(np.arange(N))
-                ax.set_xticklabels(range(1, N+1), fontsize=X_FONT_SIZE) #rotation=45,
+                # Construct confusion matrix (vectorized)
+                # We compare `this_samples_sequence` against each position
+                # Sum each time it was observed at that point in the sequence
+                # And normalize for number of samples/sequences
+                confus_matrix = (this_samples_sequence==np.arange(N)[:, None, None]).sum(1) / this_samples_sequence.shape[0]
 
+                # Add axis title
+                if cval == False:
+                    temp_mean_f = np.mean(samples_f, 1)
+                    # Shuffle vals according to subtype_order
+                    # This defaults to previous method if custom order not given
+                    vals = temp_mean_f[subtype_order]
+
+                    if n_samples != np.inf:
+                        title_i = f"Subtype {i+1} (f={vals[i]:.2f}, n={np.round(vals[i] * n_samples):n})"
+                    else:
+                        title_i = f"Subtype {i+1} (f={vals[i]:.2f})"
+                else:
+                    title_i = f"Subtype {i+1} cross-validated"
+
+                # Plot the matrix
+                # Manually set vmin/vmax to handle edge cases
+                # and ensure consistent colourization across figures 
+                # when certainty=1
+                ax.imshow(
+                    confus_matrix[biomarker_order, :],
+                    interpolation='nearest',
+                    cmap=cmap,
+                    vmin=0,
+                    vmax=1
+                )
+                # Add the xticks and labels
+                stage_ticks = np.arange(0, N, stage_interval)
+                ax.set_xticks(stage_ticks)
+                ax.set_xticklabels(stage_ticks+1, fontsize=stage_font_size, rotation=stage_rot)
+                # Add the yticks and labels
                 ax.set_yticks(np.arange(N_bio))
-                ax.set_yticklabels(np.array(biomarker_labels_plot_order, dtype='object'), ha='right', fontsize=Y_FONT_SIZE)           #rotation=30, ha='right', rotation_mode='anchor'
-
-                for tick in ax.yaxis.get_major_ticks():
-                    tick.label.set_color('black')
-
-                #ax.set_ylabel('Biomarker name') #, fontsize=20)
-                ax.set_xlabel('Event position', fontsize=X_FONT_SIZE)
-                ax.set_title(title_i, fontsize=TITLE_FONT_SIZE)
-                    
-        plt.tight_layout()
-        #if cval:
-        #    fig.suptitle('Cross validation')
-
-        return fig, ax
+                # Add biomarker labels to LHS of every row
+                if (i % ncols) == 0:
+                    ax.set_yticklabels(biomarker_labels, ha='right', fontsize=label_font_size, rotation=label_rot)
+                    # Set biomarker label colours
+                    for tick_label in ax.get_yticklabels():
+                        tick_label.set_color(biomarker_colours[tick_label.get_text()])
+                else:
+                    ax.set_yticklabels([])
+                # Make the event label slightly bigger than the ticks
+                ax.set_xlabel(stage_label, fontsize=stage_font_size+2)
+                ax.set_title(title_i, fontsize=title_font_size)
+            # Tighten up the figure
+            fig.tight_layout()
+            # Save if a path is given
+            if save_path is not None:
+                # Modify path for specific subtype if specified
+                # Don't modify save_path!
+                if separate_subtypes:
+                    save_name = f"{save_path}_subtype{i}"
+                else:
+                    save_name = f"{save_path}_all-subtypes"
+                # Handle file format, avoids issue with . in filenames
+                if "format" in save_kwargs:
+                    file_format = save_kwargs.pop("format")
+                # Default to png
+                else:
+                    file_format = "png"
+                # Save the figure, with additional kwargs
+                fig.savefig(
+                    f"{save_name}.{file_format}",
+                    **save_kwargs
+                )
+        return figs, axs
 
     def subtype_and_stage_individuals_newData(self, L_yes_new, L_no_new, samples_sequence, samples_f, N_samples):
 
@@ -443,7 +505,6 @@ class MixtureSustain(AbstractSustain):
 
         return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
-    # ********************* STATIC METHODS
     @staticmethod
     def linspace_local2(a, b, N, arange_N):
         return a + (b - a) / (N - 1.) * arange_N
