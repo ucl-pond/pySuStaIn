@@ -180,7 +180,7 @@ def generate_data_mixture_sustain(subtypes, stages, gt_ordering, mixture_style):
     for i in range(N_subjects):
 
         S_i                             = gt_ordering[subtypes[i], :].astype(int)
-        stage_i                         = np.asscalar(stages[i])
+        stage_i                         = stages[i].item()
 
         #fill in with ABNORMAL values up to the subject's stage
         for j in range(stage_i):

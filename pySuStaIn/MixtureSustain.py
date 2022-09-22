@@ -614,7 +614,7 @@ class MixtureSustain(AbstractSustain):
         #loop over all subjects, creating measurment for each biomarker based on what subtype and stage they're in
         for i in range(N_subjects):
             S_i                             = gt_ordering[subtypes[i], :].astype(int)
-            stage_i                         = np.asscalar(stages[i])
+            stage_i                         = stages[i].item()
 
             #fill in with ABNORMAL values up to the subject's stage
             for j in range(stage_i):
