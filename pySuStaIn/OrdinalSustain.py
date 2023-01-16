@@ -438,7 +438,7 @@ class OrdinalSustain(AbstractSustain):
         return a + (b - a) / (N - 1.) * arange_N
 
     @staticmethod
-    def plot_positional_var(samples_sequence, samples_f, n_samples, score_vals, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None, separate_subtypes=False, save_path=None, save_kwargs={}):
+    def plot_positional_var(samples_sequence, samples_f, n_samples, score_vals, biomarker_labels=None, ml_f_EM=None, cval=False, subtype_order=None, biomarker_order=None, title_font_size=12, stage_font_size=10, stage_label='SuStaIn Stage', stage_rot=0, stage_interval=1, label_font_size=10, label_rot=0, cmap="original", biomarker_colours=None, figsize=None, subtype_titles=None, separate_subtypes=False, save_path=None, save_kwargs={}):
         # Get the number of subtypes
         N_S = samples_sequence.shape[0]
         # Get the number of features/biomarkers
@@ -484,7 +484,9 @@ class OrdinalSustain(AbstractSustain):
         # Otherwise reorder according to given order (or not if not given)
         else:
             biomarker_labels = [biomarker_labels[i] for i in biomarker_order]
-
+        # Check number of subtype titles is correct if given
+        if subtype_titles is not None:
+            assert len(subtype_titles) == N_S
         # Z-score colour definition
         if cmap == "original":
             # Hard-coded colours: hooray!
@@ -587,19 +589,22 @@ class OrdinalSustain(AbstractSustain):
                         confus_matrix_score.reshape(N_bio, N, 1),
                         (1, 1, alter_level.sum())
                     )
-                # Add axis title
-                if cval == False:
-                    temp_mean_f = np.mean(samples_f, 1)
-                    # Shuffle vals according to subtype_order
-                    # This defaults to previous method if custom order not given
-                    vals = temp_mean_f[subtype_order]
-
-                    if n_samples != np.inf:
-                        title_i = f"Group {i+1} (f={vals[i]:.2f}, n={np.round(vals[i] * n_samples):n})"
-                    else:
-                        title_i = f"Group {i+1} (f={vals[i]:.2f})"
+                if subtype_titles is not None:
+                    title_i = subtype_titles[i]
                 else:
-                    title_i = f"Group {i+1} cross-validated"
+                    # Add axis title
+                    if cval == False:
+                        temp_mean_f = np.mean(samples_f, 1)
+                        # Shuffle vals according to subtype_order
+                        # This defaults to previous method if custom order not given
+                        vals = temp_mean_f[subtype_order]
+
+                        if n_samples != np.inf:
+                            title_i = f"Subtype {i+1} (f={vals[i]:.2f}, n={np.round(vals[i] * n_samples):n})"
+                        else:
+                            title_i = f"Subtype {i+1} (f={vals[i]:.2f})"
+                    else:
+                        title_i = f"Subtype {i+1} cross-validated"
                 # Plot the colourized matrix
                 ax.imshow(
                     confus_matrix_c[biomarker_order, :, :],

@@ -475,7 +475,6 @@ class ZscoreSustainMissingData(AbstractSustain):
 
     @staticmethod
     def plot_positional_var(*args, **kwargs):
-        # TODO: ZscoreMissing should be a child of Zscore
         return ZscoreSustain.plot_positional_var(*args, **kwargs)
 
     # ********************* TEST METHODS
