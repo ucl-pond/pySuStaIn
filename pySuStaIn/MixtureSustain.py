@@ -526,51 +526,18 @@ class MixtureSustain(AbstractSustain):
     # ********************* TEST METHODS
     @classmethod
     def test_sustain(cls, n_biomarkers, n_samples, n_subtypes, ground_truth_subtypes, sustain_kwargs, seed=42, mixture_type="mixture_GMM"):
-        # Avoid import outside of testing
-        from kde_ebm.mixture_model import fit_all_gmm_models, fit_all_kde_models #from mixture_model import fit_all_gmm_models, fit_all_kde_models
-        # Set a global seed to propagate (particularly for mixture_model)
-        np.random.seed(seed)
-
-        ground_truth_sequences = cls.generate_random_model(n_biomarkers, n_subtypes)
-
-        N_stages = n_biomarkers
-
-        ground_truth_stages_control = np.zeros((int(np.round(n_samples * 0.25)), 1))
-        ground_truth_stages_other = np.random.randint(1, N_stages+1, (int(np.round(n_samples * 0.75)), 1))
-        ground_truth_stages = np.vstack(
-            (ground_truth_stages_control, ground_truth_stages_other)
-        ).astype(int)
-
-        data, data_denoised = cls.generate_data(
-            ground_truth_subtypes,
-            ground_truth_stages,
-            ground_truth_sequences,
-            mixture_type
-        )
-        # choose which subjects will be cases and which will be controls
-        MIN_CASE_STAGE = np.round((n_biomarkers + 1) * 0.8)
-        index_case = np.where(ground_truth_stages >=  MIN_CASE_STAGE)[0]
-        index_control = np.where(ground_truth_stages ==  0)[0]
-
-        labels = 2 * np.ones(data.shape[0], dtype=int) # 2 - intermediate value, not used in mixture model fitting
-        labels[index_case] = 1                         # 1 - cases
-        labels[index_control] = 0                      # 0 - controls
-
-        data_case_control = data[labels != 2, :]
-        labels_case_control = labels[labels != 2]
-        if mixture_type == "mixture_GMM":
-            mixtures = fit_all_gmm_models(data, labels)
-        elif mixture_type == "mixture_KDE":
-            mixtures = fit_all_kde_models(data, labels)
-        
-        L_yes = np.zeros(data.shape)
-        L_no = np.zeros(data.shape)
-        for i in range(n_biomarkers):
-            if mixture_type == "mixture_GMM":
-                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(None, data[:, i])
-            elif mixture_type == "mixture_KDE":
-                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(data[:, i].reshape(-1, 1))
-
+        from pathlib import Path
+        # Path to load/save the arrays
+        array_path = Path.cwd() / "mixture_arrays.npz"
+        # If not present, create and save the mixture arrays
+        # NOTE: This will require kde_ebm to be installed, but should not be required by users
+        if not Path(array_path).is_file():
+            cls.create_mixture_data(n_biomarkers, n_samples, n_subtypes, ground_truth_subtypes, seed, mixture_type, save_path=array_path)
+        # Load the saved arrays
+        npzfile = np.load("mixture_arrays.npz")
+        # Extract the arrays
+        L_yes = npzfile['L_yes']
+        L_no = npzfile['L_no']
         return cls(
             L_yes, L_no,
             **sustain_kwargs
@@ -595,7 +562,7 @@ class MixtureSustain(AbstractSustain):
             print('WARNING: Iterated 30 times and could not find unique sequences for all subtypes.')
         return S
 
-    # TODO: Refactor as Zscore func
+    @staticmethod
     def generate_data(subtypes, stages, gt_ordering, mixture_style):
         N_biomarkers                        = gt_ordering.shape[1]
         N_subjects                          = len(subtypes)
@@ -637,3 +604,52 @@ class MixtureSustain(AbstractSustain):
                 data[i, S_i[j]]             = np.random.normal(mean_controls[S_i[j]], std_controls[S_i[j]])
                 data_denoised[i, S_i[j]]    = mean_controls[S_i[j]]
         return data, data_denoised #, stage_value
+
+    @classmethod
+    def create_mixture_data(cls, n_biomarkers, n_samples, n_subtypes, ground_truth_subtypes, seed, mixture_type, save_path):
+        # Avoid import outside of testing
+        from kde_ebm.mixture_model import fit_all_gmm_models, fit_all_kde_models #from mixture_model import fit_all_gmm_models, fit_all_kde_models
+        # Set a global seed to propagate (particularly for mixture_model)
+        np.random.seed(seed)
+
+        ground_truth_sequences = cls.generate_random_model(n_biomarkers, n_subtypes)
+
+        N_stages = n_biomarkers
+
+        ground_truth_stages_control = np.zeros((int(np.round(n_samples * 0.25)), 1))
+        ground_truth_stages_other = np.random.randint(1, N_stages+1, (int(np.round(n_samples * 0.75)), 1))
+        ground_truth_stages = np.vstack(
+            (ground_truth_stages_control, ground_truth_stages_other)
+        ).astype(int)
+
+        data, data_denoised = cls.generate_data(
+            ground_truth_subtypes,
+            ground_truth_stages,
+            ground_truth_sequences,
+            mixture_type
+        )
+        # choose which subjects will be cases and which will be controls
+        MIN_CASE_STAGE = np.round((n_biomarkers + 1) * 0.8)
+        index_case = np.where(ground_truth_stages >=  MIN_CASE_STAGE)[0]
+        index_control = np.where(ground_truth_stages ==  0)[0]
+
+        labels = 2 * np.ones(data.shape[0], dtype=int) # 2 - intermediate value, not used in mixture model fitting
+        labels[index_case] = 1                         # 1 - cases
+        labels[index_control] = 0                      # 0 - controls
+
+        data_case_control = data[labels != 2, :]
+        labels_case_control = labels[labels != 2]
+        if mixture_type == "mixture_GMM":
+            mixtures = fit_all_gmm_models(data, labels)
+        elif mixture_type == "mixture_KDE":
+            mixtures = fit_all_kde_models(data, labels)
+
+        L_yes = np.zeros(data.shape)
+        L_no = np.zeros(data.shape)
+        for i in range(n_biomarkers):
+            if mixture_type == "mixture_GMM":
+                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(None, data[:, i])
+            elif mixture_type == "mixture_KDE":
+                L_no[:, i], L_yes[:, i] = mixtures[i].pdf(data[:, i].reshape(-1, 1))
+        # Save the arrays
+        np.savez(save_path, L_yes=L_yes, L_no=L_no)
