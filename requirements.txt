@@ -3,6 +3,7 @@ numpy>=1.18
 scipy
 matplotlib>=3.0.0
 pathos
+dill==0.3.5.1
 sklearn
 pandas
 pybind11
