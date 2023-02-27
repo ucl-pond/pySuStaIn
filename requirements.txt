@@ -4,7 +4,7 @@ scipy
 matplotlib>=3.0.0
 pathos
 dill==0.3.5.1
-sklearn
+scikit-learn
 pandas
 pybind11
 awkde @ git+https://github.com/noxtoby/awkde.git
