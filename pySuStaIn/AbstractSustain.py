@@ -570,8 +570,9 @@ class AbstractSustain(ABC):
 
         for i in range(nSamples):
             this_prob_subtype               = np.squeeze(prob_subtype[i, :])
-
+            # if not np.isnan(this_prob_subtype).any()
             if (np.sum(np.isnan(this_prob_subtype)) == 0):
+                # this_subtype = this_prob_subtype.argmax(
                 this_subtype                = np.where(this_prob_subtype == np.max(this_prob_subtype))
 
                 try:
@@ -587,11 +588,16 @@ class AbstractSustain(ABC):
                         prob_ml_subtype[i]  = this_prob_subtype[this_subtype[0][0]]
 
             this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
+            
             if (np.sum(np.isnan(this_prob_stage)) == 0):
+                # this_stage = 
                 this_stage                  = np.where(this_prob_stage == np.max(this_prob_stage))
                 ml_stage[i]                 = this_stage[0][0]
                 prob_ml_stage[i]            = this_prob_stage[this_stage[0][0]]
-
+        # NOTE: The above loop can be replaced with some simpler numpy calls
+        # May need to do some masking to avoid NaNs, or use `np.nanargmax` depending on preference
+        # E.g. ml_subtype == prob_subtype.argmax(1)
+        # E.g. ml_stage == prob_subtype_stage[np.arange(prob_subtype_stage.shape[0]), :, ml_subtype].argmax(1)
         return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
     # ********************* PROTECTED METHODS
