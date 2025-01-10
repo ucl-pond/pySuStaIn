@@ -22,7 +22,7 @@ Installation
 ============
 ## Install option 1 (for installing the pySuStaIn code in a chosen directory): clone repository, install locally
 
-1) [Clone this repo](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
+1) Clone this repo: [cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
 
 2) Navigate to the main pySuStaIn directory (where you see setup.py, README.txt, LICENSE.txt, and all subfolders), then run:
 
@@ -34,8 +34,7 @@ Either way, it will install everything listed in `requirements.txt`, including t
 
 ### Possible errors during installation
 
-1. During the installation of `awkde`, an error may appear, but then the installation _should_ continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
-2. The installation uses `numpy` and requires an older version of `setuptools` (< 65). See [Troubleshooting](#troubleshooting) below.
+- During the installation of `awkde`, an error may appear, but then the installation _should_ continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
 
 ## Install option 2 (for simply using pySuStaIn as a package): direct install from repository
 
@@ -43,27 +42,26 @@ Either way, it will install everything listed in `requirements.txt`, including t
 
        pip install git+https://github.com/ucl-pond/pySuStaIn
 
-Note that if you must already have numpy (1.18+) installed to do this. To create a new environment, follow the instructions in the [Troubleshooting](#troubleshooting) section below.
+To create a new environment, follow the instructions in the [Troubleshooting](#troubleshooting) section below.
 
 Troubleshooting
 ============
+
 If the above install breaks, you may have some interfering packages installed. One way around this would be to create a new [Anaconda](https://www.anaconda.com) environment that uses Python 3.7+, then activate it and repeat the installation steps above. To do this, download and install Anaconda/Miniconda, then run:
 
 ```
-conda create --name sustain_env python=3.7
+conda create --name sustain_env 'python>3.6'
 conda activate sustain_env
-python -m pip install numpy
-python -m pip install 'setuptools <65'
 ```
 
-To create an environment named `sustain_env` and install numpy. Then, follow the installation instructions as normal.
+To create an environment named `sustain_env`. Then, follow the installation instructions above as normal.
 
 
 
 Dependencies
 ============
 - Python >= 3.7
-- [setuptools](https://pypi.org/project/setuptools/) < 65
+- [setuptools](https://pypi.org/project/setuptools/)
 - [NumPy](https://github.com/numpy/numpy) >= 1.18
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
