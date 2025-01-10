@@ -30,7 +30,12 @@ Installation
 
     Alternatively, you can do `pip install -e .` where the `-e` flag allows you to make edits to the code without reinstalling.
 
-Either way, it will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). During the installation of `awkde`, an error may appear, but then the installation should continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
+Either way, it will install everything listed in `requirements.txt`, including the [awkde](https://github.com/mennthor/awkde) package (used for mixture modelling). 
+
+### Possible errors during installation
+
+1. During the installation of `awkde`, an error may appear, but then the installation _should_ continue and be successful. Note that you need `pip` version 18.1+ for this installation to work.
+2. The installation uses `numpy` and requires an older version of `setuptools` (< 65). See [Troubleshooting](#troubleshooting) below.
 
 ## Install option 2 (for simply using pySuStaIn as a package): direct install from repository
 
@@ -45,9 +50,10 @@ Troubleshooting
 If the above install breaks, you may have some interfering packages installed. One way around this would be to create a new [Anaconda](https://www.anaconda.com) environment that uses Python 3.7+, then activate it and repeat the installation steps above. To do this, download and install Anaconda/Miniconda, then run:
 
 ```
-conda create  --name sustain_env python=3.7
+conda create --name sustain_env python=3.7
 conda activate sustain_env
-conda install numpy
+python -m pip install numpy
+python -m pip install 'setuptools <65'
 ```
 
 To create an environment named `sustain_env` and install numpy. Then, follow the installation instructions as normal.
@@ -56,14 +62,15 @@ To create an environment named `sustain_env` and install numpy. Then, follow the
 
 Dependencies
 ============
-- Python >= 3.7 
-- [NumPy >= 1.18](https://github.com/numpy/numpy)
+- Python >= 3.7
+- [setuptools](https://pypi.org/project/setuptools/) < 65
+- [NumPy](https://github.com/numpy/numpy) >= 1.18
 - [SciPy](https://github.com/scipy/scipy)
 - [Matplotlib](https://github.com/matplotlib/matplotlib)
 - [Scikit-learn](https://scikit-learn.org) for cross-validation
 - [kde_ebm](https://github.com/noxtoby/kde_ebm_open) for mixture modelling (KDE and GMM included)
+   - [awkde](https://github.com/mennthor/awkde) for KDE mixture modelling
 - [pathos](https://github.com/uqfoundation/pathos) for parallelization
-- [awkde](https://github.com/mennthor/awkde) for KDE mixture modelling
 
 Testing
 ===============
