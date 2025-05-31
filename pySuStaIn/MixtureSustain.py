@@ -168,7 +168,7 @@ class MixtureSustain(AbstractSustain):
         # adding 1e-250 fixes divide by zero problem that happens rarely
         p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
 
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
+        f_opt                               = (np.squeeze(np.sum(p_perm_k_norm, axis = (1, 0))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
         order_seq                           = rng.permutation(N_S)    #np.random.permutation(N_S)  # this will produce different random numbers to Matlab
@@ -208,7 +208,7 @@ class MixtureSustain(AbstractSustain):
                     possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
                 possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
-                max_likelihood              = max(possible_likelihood)
+                max_likelihood              = np.max(possible_likelihood)
                 this_S                      = possible_sequences[possible_likelihood == max_likelihood, :]
                 this_S                      = this_S[0, :]
                 S_opt[s]                    = this_S
@@ -219,7 +219,7 @@ class MixtureSustain(AbstractSustain):
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
         p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
+        f_opt                               = (np.squeeze(np.sum(p_perm_k_norm, axis = (1, 0))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
 
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
