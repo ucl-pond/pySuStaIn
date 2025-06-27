@@ -155,25 +155,38 @@ class MixtureSustain(AbstractSustain):
         Computes the likelihood of a single event-based model, intended for use with the dynamic programming
         speed-up, where the new_biomarker is moved from the last position to the first position.
 
+        Precondition:
+        If the inputs new_biomarker is not None and position is not None, 
+        then the input S is the sequence with new_biomarker in (position + 1).
+
         Inputs:
         =======
         L_yes - likelihood an event has occurred in each subject
                 dim: number of subjects x number of biomarkers
         L_no -  likelihood an event has not occurred in each subject
                 dim: number of subjects x number of biomarkers
-        S -     the current ordering of the stages for a particular subtype minus
-                the current biomarker we are moving the position for
-                dim: 1 x (number of events - 1)
+        S -     the current ordering of the stages for a particular subtype
+                dim: 1 x number of events
         new_biomarker - the biomarker that we are moving the position for
         position - the position that we want to move the new_biomarker into S
-        cp_yes - cumulative product matrix for L_yes (ordered by S)
-        cp_no - cumulative product matrix for L_no (ordered by S)
-        cp_no_org - cumulative product matrix from previous level (has one less column than cp_no)
+        cp_yes - cumulative product matrix for L_yes, with the columns of L_yes being ordered by S
+                 dim: number of subjects x number of biomarkers
+        cp_no - cumulative product matrix for L_no, with the columns of L_no being ordered by S reversed
+                dim: number of subjects x number of biomarkers
+        cp_no_org - cumulative product matrix for L_no 
+                    (with L_no ordered by S' reversed, where S' is the subset of S that does not contain new_biomarker)
+                    dim: number of subjects x (number of biomarkers - 1)
         
         Outputs:
         ========
         p_perm_k - the probability of each subjects data at each stage of a particular subtype
-            in the SuStaIn model
+                   in the SuStaIn model
+        cp_yes - updated cumulative product matrix for L_yes
+                 (with L_yes ordered by S that has new_biomarker inserted into position)
+        cp_no - updated cumulative product matrix for L_no 
+                (with L_no ordered by reversed S that has new_biomarker inserted into position)
+        cp_no_org - cumulative product matrix for L_no 
+                    (with L_no ordered by S', where S' is the subset of S that does not contain new_biomarker)
         '''
 
         M, N = L_yes.shape[0], len(S)
@@ -197,7 +210,7 @@ class MixtureSustain(AbstractSustain):
         p_perm_k[:, -1] = cp_yes[:, -1]
         p_perm_k *= 1 / (N + 1)
 
-        return p_perm_k, cp_yes, cp_no, cp_no_org        
+        return p_perm_k, cp_yes, cp_no, cp_no_org
 
     def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         # Optimise the parameters of the SuStaIn model
@@ -754,3 +767,4 @@ class MixtureSustain(AbstractSustain):
                 L_no[:, i], L_yes[:, i] = mixtures[i].pdf(data[:, i].reshape(-1, 1))
         # Save the arrays
         np.savez(save_path, L_yes=L_yes, L_no=L_no)
+
