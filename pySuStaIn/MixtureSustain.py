@@ -64,6 +64,7 @@ class MixtureSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
+                 use_dp=False,
                  seed=None):
         # The initializer for the mixture model based events implementation of AbstractSustain
         # Parameters:
@@ -78,6 +79,7 @@ class MixtureSustain(AbstractSustain):
         #   output_folder               - where to save pickle files, etc.
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
+        #   use_dp                      - boolean for whether or not to speed up optimise_parameters via dynamic programming
         #   seed                        - random number seed
 
         N                               =  L_yes.shape[1] # number of biomarkers
@@ -87,6 +89,7 @@ class MixtureSustain(AbstractSustain):
 
         numStages                       = L_yes.shape[1]    #number of stages == number of biomarkers here
         self.__sustainData              = MixtureSustainData(L_yes, L_no, numStages)
+        self.use_dp = use_dp
 
         super().__init__(self.__sustainData,
                          N_startpoints,
@@ -146,6 +149,69 @@ class MixtureSustain(AbstractSustain):
         return p_perm_k
 
 
+    def _calculate_likelihood_subset(self, L_yes, L_no, S, new_biomarker = None, 
+                                    position = None, cp_yes = None, cp_no = None, cp_no_org = None):
+        '''
+        Computes the likelihood of a single event-based model, intended for use with the dynamic programming
+        speed-up, where the new_biomarker is moved from the last position to the first position.
+
+        Precondition:
+        If the inputs new_biomarker is not None and position is not None, 
+        then the input S is the sequence with new_biomarker in (position + 1).
+
+        Inputs:
+        =======
+        L_yes - likelihood an event has occurred in each subject
+                dim: number of subjects x number of biomarkers
+        L_no -  likelihood an event has not occurred in each subject
+                dim: number of subjects x number of biomarkers
+        S -     the current ordering of the stages for a particular subtype
+                dim: 1 x number of events
+        new_biomarker - the biomarker that we are moving the position for
+        position - the position that we want to move the new_biomarker into S
+        cp_yes - cumulative product matrix for L_yes, with the columns of L_yes being ordered by S
+                 dim: number of subjects x number of biomarkers
+        cp_no - cumulative product matrix for L_no, with the columns of L_no being ordered by S reversed
+                dim: number of subjects x number of biomarkers
+        cp_no_org - cumulative product matrix for L_no 
+                    (with L_no ordered by S' reversed, where S' is the subset of S that does not contain new_biomarker)
+                    dim: number of subjects x (number of biomarkers - 1)
+        
+        Outputs:
+        ========
+        p_perm_k - the probability of each subjects data at each stage of a particular subtype
+                   in the SuStaIn model
+        cp_yes - updated cumulative product matrix for L_yes
+                 (with L_yes ordered by S that has new_biomarker inserted into position)
+        cp_no - updated cumulative product matrix for L_no 
+                (with L_no ordered by reversed S that has new_biomarker inserted into position)
+        cp_no_org - cumulative product matrix for L_no 
+                    (with L_no ordered by S', where S' is the subset of S that does not contain new_biomarker)
+        '''
+
+        M, N = L_yes.shape[0], len(S)
+        p_perm_k                            = np.zeros((M, N+1))
+
+        if cp_yes is None:
+            # initialisation
+            S_int                               = S.astype(int)
+            cp_yes                              = np.cumprod(L_yes[:, S_int],        1)
+            cp_no                               = np.cumprod(L_no[:,  S_int[::-1]],  1)
+            cp_no_org                           = np.cumprod(L_no[:, S_int[::-1]][:, 1:], 1)
+        else:
+            if position != 0:
+                cp_yes[:, position] = cp_yes[:, position - 1] * L_yes[:, new_biomarker]
+            else:
+                cp_yes[:, position] = L_yes[:, new_biomarker]
+            cp_no[:, -(position + 2)] = cp_no_org[:, -(position + 1)]
+    
+        p_perm_k[:, 0] = cp_no[:, -1]
+        p_perm_k[:, 1:-1] = cp_no[:, :-1][:, ::-1] * cp_yes[:, :-1]
+        p_perm_k[:, -1] = cp_yes[:, -1]
+        p_perm_k *= 1 / (N + 1)
+
+        return p_perm_k, cp_yes, cp_no, cp_no_org
+
     def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         # Optimise the parameters of the SuStaIn model
 
@@ -168,58 +234,106 @@ class MixtureSustain(AbstractSustain):
         # adding 1e-250 fixes divide by zero problem that happens rarely
         p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
 
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
+        f_opt                               = (np.squeeze(np.sum(p_perm_k_norm, axis = (1, 0))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
         order_seq                           = rng.permutation(N_S)    #np.random.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
             order_bio                       = rng.permutation(N) #np.random.permutation(N)  # this will produce different random numbers to Matlab
-            for i in order_bio:
-                current_sequence            = S_opt[s]
-                assert(len(current_sequence)==N)
-                current_location            = np.array([0] * N)
-                current_location[current_sequence.astype(int)] = np.arange(N)
+            # optimised version
+            if self.use_dp:
+                for i in order_bio:
+                    current_sequence = S_opt[s]
+                    assert(len(current_sequence) == N)
+                    current_location = np.zeros(N, dtype = int)
+                    current_location[current_sequence.astype(int)] = np.arange(N)
 
-                selected_event              = i
+                    selected_event = i
+                    move_event_from = current_location[selected_event]
 
-                move_event_from             = current_location[selected_event]
+                    possible_likelihood = np.zeros((N, 1))
+                    possible_p_perm_k = np.zeros((M, N + 1, N))
 
-                possible_positions          = np.arange(N)
-                possible_sequences          = np.zeros((len(possible_positions), N))
-                possible_likelihood         = np.zeros((len(possible_positions), 1))
-                possible_p_perm_k           = np.zeros((M, N + 1, len(possible_positions)))
-                for index in range(len(possible_positions)):
-                    current_sequence        = S_opt[s]
+                    current_sequence = np.delete(current_sequence, move_event_from, 0)
+                    new_sequence = np.append(current_sequence, selected_event)
 
-                    #choose a position in the sequence to move an event to
-                    move_event_to           = possible_positions[index]
+                    temp_p_perm_k, cp_yes, cp_no, cp_no_org = self._calculate_likelihood_subset(sustainData.L_yes, sustainData.L_no, new_sequence)
+                    p_perm_k[:, :, s] = temp_p_perm_k
+                    possible_p_perm_k[:, :, N - 1] = temp_p_perm_k
 
-                    #move this event in its new position
-                    current_sequence        = np.delete(current_sequence, move_event_from, 0)  # this is different to the Matlab version, which call current_sequence(move_event_from) = []
-                    new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
-                    possible_sequences[index, :] = new_sequence
+                    total_prob_stage = np.sum(p_perm_k * f_val_mat, 2)
+                    total_prob_subj = np.sum(total_prob_stage, axis=1)
+                    possible_likelihood[N - 1] = np.sum(np.log(total_prob_subj + 1e-250))
 
-                    possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
+                    for position in range(N - 2, -1, -1):
+                        temp_p_perm_k, cp_yes, cp_no, _ = self._calculate_likelihood_subset(sustainData.L_yes, sustainData.L_no, 
+                                                                                            new_sequence, selected_event,
+                                                                                            position, cp_yes, cp_no, 
+                                                                                            cp_no_org)
+                        
+                        # calculate log_likelihood
+                        p_perm_k[:, :, s] = temp_p_perm_k
+                        possible_p_perm_k[:, :, position] = temp_p_perm_k
+                        total_prob_stage = np.sum(p_perm_k * f_val_mat, 2)
+                        total_prob_subj = np.sum(total_prob_stage, 1)
+                        possible_likelihood[position] = np.sum(np.log(total_prob_subj + 1e-250))
 
-                    p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
-                    total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
-                    total_prob_subj         = np.sum(total_prob_stage, 1)
-                    possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
+                    max_i = np.argmax(possible_likelihood)
+                    S = np.insert(current_sequence, max_i, selected_event)
+                    max_likelihood = possible_likelihood[max_i]
+                    max_p_perm_k = possible_p_perm_k[:, :, max_i]
 
-                possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
-                max_likelihood              = max(possible_likelihood)
-                this_S                      = possible_sequences[possible_likelihood == max_likelihood, :]
-                this_S                      = this_S[0, :]
-                S_opt[s]                    = this_S
-                this_p_perm_k               = possible_p_perm_k[:, :, possible_likelihood == max_likelihood]
-                p_perm_k[:, :, s]           = this_p_perm_k[:, :, 0]
+                    S_opt[s] = S
+                    p_perm_k[:, :, s] = max_p_perm_k                   
 
-            S_opt[s]                        = this_S
+            else:
+                # original version
+                for i in order_bio:
+                    current_sequence            = S_opt[s]
+                    assert(len(current_sequence)==N)
+                    current_location            = np.array([0] * N)
+                    current_location[current_sequence.astype(int)] = np.arange(N)
+
+                    selected_event              = i
+
+                    move_event_from             = current_location[selected_event]
+
+                    possible_positions          = np.arange(N)
+                    possible_sequences          = np.zeros((len(possible_positions), N))
+                    possible_likelihood         = np.zeros((len(possible_positions), 1))
+                    possible_p_perm_k           = np.zeros((M, N + 1, len(possible_positions)))
+                    for index in range(len(possible_positions)):
+                        current_sequence        = S_opt[s]
+
+                        #choose a position in the sequence to move an event to
+                        move_event_to           = possible_positions[index]
+
+                        #move this event in its new position
+                        current_sequence        = np.delete(current_sequence, move_event_from, 0)  # this is different to the Matlab version, which call current_sequence(move_event_from) = []
+                        new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                        possible_sequences[index, :] = new_sequence
+
+                        possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
+
+                        p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
+                        total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
+                        total_prob_subj         = np.sum(total_prob_stage, 1)
+                        possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
+
+                    possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
+                    max_likelihood              = np.max(possible_likelihood)
+                    this_S                      = possible_sequences[possible_likelihood == max_likelihood, :]
+                    this_S                      = this_S[0, :]
+                    S_opt[s]                    = this_S
+                    this_p_perm_k               = possible_p_perm_k[:, :, possible_likelihood == max_likelihood]
+                    p_perm_k[:, :, s]           = this_p_perm_k[:, :, 0]
+
+                S_opt[s]                        = this_S
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
         p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
+        f_opt                               = (np.squeeze(np.sum(p_perm_k_norm, axis = (1, 0))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
 
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
         f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
@@ -653,3 +767,4 @@ class MixtureSustain(AbstractSustain):
                 L_no[:, i], L_yes[:, i] = mixtures[i].pdf(data[:, i].reshape(-1, 1))
         # Save the arrays
         np.savez(save_path, L_yes=L_yes, L_no=L_no)
+
