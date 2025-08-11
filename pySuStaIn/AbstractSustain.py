@@ -569,7 +569,7 @@ class AbstractSustain(ABC):
         prob_ml_stage                       = np.nan * np.ones((nSamples, 1))
 
         for i in range(nSamples):
-            this_prob_subtype               = np.squeeze(prob_subtype[i, :])
+            this_prob_subtype               = np.atleast_1d(np.squeeze(prob_subtype[i, :]))
             # if not np.isnan(this_prob_subtype).any()
             if (np.sum(np.isnan(this_prob_subtype)) == 0):
                 # this_subtype = this_prob_subtype.argmax(
