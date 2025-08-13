@@ -460,7 +460,7 @@ class AbstractSustain(ABC):
             corr_mat                        = np.zeros((N_subtypes, N_subtypes))
             for j in range(N_subtypes):
                 for k in range(N_subtypes):
-                    corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
+                    corr_mat[j,k]            = stats.kendalltau(np.argsort(ml_sequence_EM_full[j,:]), np.argsort(ml_sequence_EM_i[k,:])).correlation
             set_full                        = []
             set_fold_i                      = []
             i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
