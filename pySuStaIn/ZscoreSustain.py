@@ -722,7 +722,7 @@ class ZscoreSustain(AbstractSustain):
 
         IX_select = np.nonzero(stage_zscore)[0]
         stage_zscore = stage_zscore[IX_select]#[np.newaxis, :]
-        num_zscores = Z_vals.shape[0]
+        num_zscores = Z_vals.shape[1]
 
         stage_biomarker_index = np.tile(np.arange(num_biomarkers), (num_zscores,))
         stage_biomarker_index = stage_biomarker_index[IX_select]#[np.newaxis, :]
