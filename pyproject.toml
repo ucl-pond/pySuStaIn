@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=65.5"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pySuStaIn"
+version = "0.1"
+description = "Python implementation of the SuStaIn algorithm"
+#readme = "README.md"  # optional, if you have it
+requires-python = ">=3.7"
+license = { text = "TBC" }
+authors = [
+  { name = "Leon Aksman", email = "l.aksman@ucl.ac.uk" }
+]
+maintainers = [
+  { name = "Leon Aksman", email = "l.aksman@ucl.ac.uk" }
+]
+dependencies = [
+  #you should have python 3.7 or higher to use numpy 1.18
+  "numpy>=1.18",
+  "scipy",
+  "matplotlib>=3.0.0",
+  "pathos",
+  "dill==0.3.5.1",
+  "scikit-learn",
+  "pandas",
+  "pybind11",
+  "awkde @ git+https://github.com/noxtoby/awkde.git",
+  "kde_ebm @ git+https://github.com/ucl-pond/kde_ebm.git",
+  "tqdm"
+]
+
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.7",
+  "Topic :: Scientific/Engineering"
+]
+
+[project.urls]
+Homepage = "https://github.com/ucl-pond/pySuStaIn"
+
+[tool.setuptools]
+packages = ["pySuStaIn", "sim"]
+
+# [tool.setuptools.packages.find]
+# where = ["."]
