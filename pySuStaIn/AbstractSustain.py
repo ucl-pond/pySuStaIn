@@ -460,7 +460,7 @@ class AbstractSustain(ABC):
             corr_mat                        = np.zeros((N_subtypes, N_subtypes))
             for j in range(N_subtypes):
                 for k in range(N_subtypes):
-                    corr_mat[j,k]            = stats.kendalltau(ml_sequence_EM_full[j,:], ml_sequence_EM_i[k,:]).correlation
+                    corr_mat[j,k]            = stats.kendalltau(np.argsort(ml_sequence_EM_full[j,:]), np.argsort(ml_sequence_EM_i[k,:])).correlation
             set_full                        = []
             set_fold_i                      = []
             i_i, i_j                        = np.unravel_index(np.argsort(corr_mat.flatten())[::-1], (N_subtypes, N_subtypes))
@@ -569,7 +569,7 @@ class AbstractSustain(ABC):
         prob_ml_stage                       = np.nan * np.ones((nSamples, 1))
 
         for i in range(nSamples):
-            this_prob_subtype               = np.squeeze(prob_subtype[i, :])
+            this_prob_subtype               = np.atleast_1d(np.squeeze(prob_subtype[i, :]))
             # if not np.isnan(this_prob_subtype).any()
             if (np.sum(np.isnan(this_prob_subtype)) == 0):
                 # this_subtype = this_prob_subtype.argmax(
