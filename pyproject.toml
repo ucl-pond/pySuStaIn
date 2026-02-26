@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pySuStaIn"
-version = "0.1"
+version = "0.2beta"
 description = "Python implementation of the SuStaIn algorithm"
 #readme = "README.md"  # optional, if you have it
 requires-python = ">=3.7"
