@@ -176,7 +176,7 @@ class OrdinalSustain(AbstractSustain):
         N = self.stage_score.shape[1]
 
         B = sustainData.prob_nl.shape[1]
-    
+
         IS_normal = np.ones(B)
         IS_abnormal = np.zeros(B)
         index_reached = np.zeros(B,dtype=int)
@@ -187,7 +187,7 @@ class OrdinalSustain(AbstractSustain):
 
         for j in range(N):
             index_justreached = int(S[j])
-            biomarker_justreached = int(self.stage_biomarker_index[:,index_justreached])
+            biomarker_justreached = int(self.stage_biomarker_index[:,index_justreached][0])
             index_reached[biomarker_justreached] = index_justreached
             IS_normal[biomarker_justreached] = 0
             IS_abnormal[biomarker_justreached] = 1
@@ -246,12 +246,14 @@ class OrdinalSustain(AbstractSustain):
                     min_score_bound        = max(possible_scores_biomarker[min_filter])
                     min_score_bound_event  = events[((self.stage_score[0] == min_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
                     move_event_to_lower_bound = current_location[min_score_bound_event] + 1
+                    move_event_to_lower_bound = move_event_to_lower_bound[0] # [0] for latest version of numpy
                 else:
                     move_event_to_lower_bound = 0
                 if np.any(max_filter):
                     max_score_bound        = min(possible_scores_biomarker[max_filter])
                     max_score_bound_event  = events[((self.stage_score[0] == max_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
                     move_event_to_upper_bound = current_location[max_score_bound_event]
+                    move_event_to_upper_bound = move_event_to_upper_bound[0] # [0] for latest version of numpy
                 else:
                     move_event_to_upper_bound = N
                     # FIXME: hack because python won't produce an array in range (N,N), while matlab will produce an array (N)... urgh
@@ -281,17 +283,30 @@ class OrdinalSustain(AbstractSustain):
                     possible_likelihood[index] = sum(np.log(total_prob_subj + 1e-250))
 
                 possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
-                max_likelihood              = max(possible_likelihood)
-                this_S                      = possible_sequences[possible_likelihood == max_likelihood, :]
+                max_likelihood              = np.nanmax(possible_likelihood)
+                argmax_array                = possible_likelihood == max_likelihood
+                this_S                      = possible_sequences[argmax_array, :] #this_S                      = possible_sequences[possible_likelihood == max_likelihood, :]
                 this_S                      = this_S[0, :]
                 S_opt[s]                    = this_S
-                this_p_perm_k               = possible_p_perm_k[:, :, possible_likelihood == max_likelihood]
+                #this_p_perm_k               = possible_p_perm_k[:, :, possible_likelihood == max_likelihood]
+                this_p_perm_k               = possible_p_perm_k[:, :, argmax_array]
                 p_perm_k[:, :, s]           = this_p_perm_k[:, :, 0]
 
             S_opt[s]                        = this_S
 
         p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        #print(f"{p_perm_k_weighted.shape = }")
+        # ### DEBUGGING CODE
+        # norm__ = np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        # print(f"{norm__ =}")
+        # if norm__ < 1e-15:
+        #     print("norm is bascially zero")
+        # p_perm_k_norm                       = p_perm_k_weighted / norm__
+        #
+        ## adding 1e-250: has previously fixed divide by zero problem that happens rarely
+        p_perm_k_norm                       = p_perm_k_weighted / np.tile(1e-250 + np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))
+        # ### END DEBUGGING CODE
+        #p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
         f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
 
         f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
@@ -346,6 +361,7 @@ class OrdinalSustain(AbstractSustain):
                         min_score_bound            = max(possible_scores_biomarker[min_filter])
                         min_score_bound_event      = events[((self.stage_score[0] == min_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
                         move_event_to_lower_bound   = current_location[min_score_bound_event] + 1
+                        move_event_to_lower_bound = move_event_to_lower_bound[0] # [0] for latest version of numpy
                     else:
                         move_event_to_lower_bound   = 0
 
@@ -353,6 +369,7 @@ class OrdinalSustain(AbstractSustain):
                         max_score_bound            = min(possible_scores_biomarker[max_filter])
                         max_score_bound_event      = events[((self.stage_score[0] == max_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
                         move_event_to_upper_bound   = current_location[max_score_bound_event]
+                        move_event_to_upper_bound = move_event_to_upper_bound[0] # [0] for latest version of numpy
                     else:
                         move_event_to_upper_bound   = N
 
@@ -374,7 +391,7 @@ class OrdinalSustain(AbstractSustain):
                     weight                  /= np.sum(weight)
                     index                   = self.global_rng.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
 
-                    move_event_to           = possible_positions[index]
+                    move_event_to           = possible_positions[index][0] # [0] for latest version of numpy
 
                     current_sequence        = np.delete(current_sequence, move_event_from, 0)
                     new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
