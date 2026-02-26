@@ -111,8 +111,9 @@ class AbstractSustain(ABC):
             np_version                  = float(np.__version__.split('.')[0] + '.' + np.__version__.split('.')[1])
             assert np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly."
 
-            self.pool                   = pathos.multiprocessing.ProcessingPool() #pathos.multiprocessing.ParallelPool()
-            self.pool.ncpus             = multiprocessing.cpu_count()
+            self.pool = pathos.multiprocessing.ProcessingPool(
+                int(os.environ.get('OMP_NUM_THREADS', multiprocessing.cpu_count()))
+            )
         else:
             self.pool                   = pathos.serial.SerialPool()
 
@@ -391,7 +392,8 @@ class AbstractSustain(ABC):
                     mean_likelihood_subj_test_cval    = mean_likelihood_subj_test
                 else:
                     mean_likelihood_subj_test_cval    = np.concatenate((mean_likelihood_subj_test_cval, mean_likelihood_subj_test), axis=0)
-
+            string = "subtype" if s==0 else "subtypes"
+            print(f"{s+1}-{string} model: {mean_likelihood_subj_test_cval = }")
             CVIC[s]                     = -2*sum(np.log(mean_likelihood_subj_test_cval))
 
         print("CVIC for each subtype model: " + str(CVIC))
@@ -553,11 +555,11 @@ class AbstractSustain(ABC):
             total_prob_subtype_stage        = self._calculate_likelihood(sustainData, this_S, this_f)
 
             total_prob_subtype              = total_prob_subtype.reshape(len(total_prob_subtype), N_S)
-            total_prob_subtype_norm         = total_prob_subtype        / np.tile(np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
-            total_prob_stage_norm           = total_prob_stage          / np.tile(np.sum(total_prob_stage, 1).reshape(len(total_prob_stage), 1),          (1, nStages + 1)) #removed total_prob_subtype
+            total_prob_subtype_norm         = total_prob_subtype        / np.tile(1e-250+np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
+            total_prob_stage_norm           = total_prob_stage          / np.tile(1e-250+np.sum(total_prob_stage, 1).reshape(len(total_prob_stage), 1),          (1, nStages + 1)) #removed total_prob_subtype
 
             #total_prob_subtype_stage_norm   = total_prob_subtype_stage  / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1), 1).reshape(nSamples, 1, 1),   (1, nStages + 1, N_S))
-            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1, keepdims=True), 2).reshape(nSamples, 1, 1),(1, nStages + 1, N_S))
+            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.tile(1e-250+np.sum(np.sum(total_prob_subtype_stage, 1, keepdims=True), 2).reshape(nSamples, 1, 1),(1, nStages + 1, N_S))
 
             prob_subtype_stage              = (i / (i + 1.) * prob_subtype_stage)   + (1. / (i + 1.) * total_prob_subtype_stage_norm)
             prob_subtype                    = (i / (i + 1.) * prob_subtype)         + (1. / (i + 1.) * total_prob_subtype_norm)
@@ -587,7 +589,8 @@ class AbstractSustain(ABC):
                     except:
                         prob_ml_subtype[i]  = this_prob_subtype[this_subtype[0][0]]
 
-            this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
+            #this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
+            this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i].squeeze())])
             
             if (np.sum(np.isnan(this_prob_stage)) == 0):
                 # this_stage = 
@@ -630,7 +633,7 @@ class AbstractSustain(ABC):
 
             ml_sequence_prev                = ml_sequence_prev.reshape(ml_sequence_prev.shape[0], ml_sequence_prev.shape[1])
             p_sequence                      = p_sequence.reshape(p_sequence.shape[0], N_S - 1)
-            p_sequence_norm                 = p_sequence / np.tile(np.sum(p_sequence, 1).reshape(len(p_sequence), 1), (N_S - 1))
+            p_sequence_norm                 = p_sequence / np.tile(1e-250 + np.sum(p_sequence, 1).reshape(len(p_sequence), 1), (N_S - 1))
 
             # Assign individuals to a subtype (cluster) based on the previous model
             ml_cluster_subj                 = np.zeros((sustainData.getNumSamples(), 1))   #np.zeros((len(data_local), 1))
