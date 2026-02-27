@@ -17,7 +17,7 @@
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
 # Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
 ###
-from multiprocessing import Value
+
 import warnings
 from tqdm.auto import tqdm
 import numpy as np
@@ -299,7 +299,9 @@ class ZscoreSustain(AbstractSustain):
                 if move_event_to_lower_bound == move_event_to_upper_bound:
                     possible_positions      = np.array([0])
                 else:
-                    possible_positions      = np.arange(move_event_to_lower_bound, move_event_to_upper_bound)
+                    lower = int(np.asarray(move_event_to_lower_bound).item())
+                    upper = int(np.asarray(move_event_to_upper_bound).item())
+                    possible_positions = np.arange(lower, upper)
                 possible_sequences          = np.zeros((len(possible_positions), N))
                 possible_likelihood         = np.zeros((len(possible_positions), 1))
                 possible_p_perm_k           = np.zeros((M, N + 1, len(possible_positions)))
@@ -377,7 +379,7 @@ class ZscoreSustain(AbstractSustain):
                     current_location        = np.array([0] * N)
                     current_location[current_sequence.astype(int)] = np.arange(N)
 
-                    selected_event          = int(current_sequence[move_event_from])
+                    selected_event          = int(np.asarray(current_sequence[move_event_from]).item()) # int(current_sequence[move_event_from])
                     this_stage_zscore       = self.stage_zscore[0, selected_event]
                     selected_biomarker      = self.stage_biomarker_index[0, selected_event]
                     possible_zscores_biomarker = self.stage_zscore[self.stage_biomarker_index == selected_biomarker]
@@ -404,7 +406,9 @@ class ZscoreSustain(AbstractSustain):
                     if move_event_to_lower_bound == move_event_to_upper_bound:
                         possible_positions          = np.array([0])
                     else:
-                        possible_positions          = np.arange(move_event_to_lower_bound, move_event_to_upper_bound)
+                        lower = int(np.asarray(move_event_to_lower_bound).item())
+                        upper = int(np.asarray(move_event_to_upper_bound).item())
+                        possible_positions = np.arange(lower, upper)
 
                     distance                = possible_positions - move_event_from
 
@@ -418,8 +422,7 @@ class ZscoreSustain(AbstractSustain):
                     weight                  /= np.sum(weight)
                     index                   = self.global_rng.choice(range(len(possible_positions)), 1, replace=True, p=weight)  # FIXME: difficult to check this because random.choice is different to Matlab randsample
 
-                    move_event_to           = possible_positions[index]
-
+                    move_event_to           = int(np.asarray(possible_positions[index]).item()) # possible_positions[index]
                     current_sequence        = np.delete(current_sequence, move_event_from, 0)
                     new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
                     samples_sequence[s, :, i] = new_sequence
@@ -814,7 +817,9 @@ class ZscoreSustain(AbstractSustain):
         M = stages.shape[0]
         data_denoised = np.zeros((M,B))
         for m in range(M):
-            data_denoised[m,:] = stage_value[:,int(stages[m]),subtypes[m]]
+            stagem = int(np.asarray(stages[m]).item())
+            subtypem = int(np.asarray(subtypes[m]).item())
+            data_denoised[m,:] = stage_value[:,stagem,subtypem]
         data = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
 
         return data, data_denoised, stage_value

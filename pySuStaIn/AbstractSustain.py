@@ -32,7 +32,7 @@ import multiprocessing
 from functools import partial, partialmethod
 
 import time
-import pathos
+from concurrent.futures import ProcessPoolExecutor
 
 #*******************************************
 #The data structure class for AbstractSustain. It has no data itself - the implementations of AbstractSustain need to define their own implementations of this class.
@@ -108,14 +108,9 @@ class AbstractSustain(ABC):
         self.use_parallel_startpoints   = use_parallel_startpoints
 
         if self.use_parallel_startpoints:
-            np_version                  = float(np.__version__.split('.')[0] + '.' + np.__version__.split('.')[1])
-            assert np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly."
-
-            self.pool = pathos.multiprocessing.ProcessingPool(
-                int(os.environ.get('OMP_NUM_THREADS', multiprocessing.cpu_count()))
-            )
+            self.n_workers = int(os.environ.get('OMP_NUM_THREADS', multiprocessing.cpu_count()))
         else:
-            self.pool                   = pathos.serial.SerialPool()
+            self.n_workers = 1
 
     #********************* PUBLIC METHODS
     def run_sustain_algorithm(self, plot=False, plot_format="png", **kwargs):
@@ -712,10 +707,13 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_iteration, sustainData)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        seed_list = seed_sequences.spawn(self.N_startpoints)
 
-        if ~isinstance(pool_output_list, list):
-            pool_output_list                = list(pool_output_list)
+        if self.use_parallel_startpoints:
+            with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+                pool_output_list = list(executor.map(partial_iter, seed_list))
+        else:
+            pool_output_list = list(map(partial_iter, seed_list))
 
         ml_sequence_mat                     = np.zeros((1, sustainData.getNumStages(), self.N_startpoints)) #np.zeros((1, self.stage_zscore.shape[1], self.N_startpoints))
         ml_f_mat                            = np.zeros((1, self.N_startpoints))
@@ -767,10 +765,13 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_split_iteration, sustainData)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        seed_list = seed_sequences.spawn(self.N_startpoints)
 
-        if ~isinstance(pool_output_list, list):
-            pool_output_list                = list(pool_output_list)
+        if self.use_parallel_startpoints:
+            with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+                pool_output_list = list(executor.map(partial_iter, seed_list))
+        else:
+            pool_output_list = list(map(partial_iter, seed_list))
 
         ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))
         ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
@@ -841,10 +842,13 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        seed_list = seed_sequences.spawn(self.N_startpoints)
 
-        if ~isinstance(pool_output_list, list):
-            pool_output_list                = list(pool_output_list)
+        if self.use_parallel_startpoints:
+            with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+                pool_output_list = list(executor.map(partial_iter, seed_list))
+        else:
+            pool_output_list = list(map(partial_iter, seed_list))
 
         ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))
         ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
