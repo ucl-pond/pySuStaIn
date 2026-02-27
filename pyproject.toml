@@ -7,26 +7,22 @@ name = "pySuStaIn"
 version = "0.2.0-rc.1"
 description = "Python implementation of the SuStaIn algorithm"
 #readme = "README.md"  # optional, if you have it
-requires-python = ">=3.7"
+requires-python = ">=3.14"
 license = { text = "TBC" }
 authors = [
   { name = "Leon Aksman", email = "l.aksman@ucl.ac.uk" }
 ]
 maintainers = [
-  { name = "Leon Aksman", email = "l.aksman@ucl.ac.uk" }
+  { name = "Leon Aksman", email = "l.aksman@ucl.ac.uk" },
+  { name = "Neil Oxtoby", email = "n.oxtoby@ucl.ac.uk" }
 ]
 dependencies = [
-  #you should have python 3.7 or higher to use numpy 1.18
-  "numpy>=1.18",
+  "numpy>=2.4.2",
   "scipy",
-  "matplotlib>=3.0.0",
-  "pathos",
-  "dill==0.3.5.1",
+  "matplotlib>=3.10.8",
   "scikit-learn",
-  "pandas",
+  "pandas>=3.0.0",
   "pybind11",
-  "awkde @ git+https://github.com/noxtoby/awkde.git",
-  "kde_ebm @ git+https://github.com/ucl-pond/kde_ebm.git",
   "tqdm"
 ]
 
@@ -35,6 +31,12 @@ classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.7",
   "Topic :: Scientific/Engineering"
+]
+
+[project.optional-dependencies]
+kdeebm = [
+  "kde_ebm @ git+https://github.com/ucl-pond/kde_ebm.git", # uses 
+  #"awkde @ git+https://github.com/mennthor/awkde.git" # NOTE: kde_ebm uses noxtoby fork of awkde (FIXME), not the original mennthor version
 ]
 
 [project.urls]
