@@ -15,7 +15,7 @@
 # Thanks a lot for supporting this project.
 #
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
-# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk), Neil Oxtoby (n.oxtoby@ucl.ac.uk)
 ###
 import numpy as np
 from scipy.stats import norm
@@ -142,7 +142,9 @@ def generate_data_Zscore_sustain(subtypes, stages, gt_ordering, Z_vals, Z_max):
     M                                   = stages.shape[0]
     data_denoised                       = np.zeros((M,B))
     for m in range(M):
-        data_denoised[m,:]              = stage_value[:,int(stages[m]),subtypes[m]]
+        stagem = int(np.asarray(stages[m]).item())
+        subtypem = int(np.asarray(subtypes[m]).item())
+        data_denoised[m,:] = stage_value[:,stagem,subtypem]
     data                                = data_denoised + norm.ppf(np.random.rand(B,M).T)*np.tile(std_biomarker_zscore,(M,1))
 
     return data, data_denoised, stage_value

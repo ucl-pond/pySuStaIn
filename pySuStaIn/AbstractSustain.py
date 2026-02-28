@@ -15,7 +15,7 @@
 # Thanks a lot for supporting this project.
 #
 # Authors:      Peter Wijeratne (p.wijeratne@ucl.ac.uk) and Leon Aksman (leon.aksman@loni.usc.edu)
-# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk)
+# Contributors: Arman Eshaghi (a.eshaghi@ucl.ac.uk), Alex Young (alexandra.young@kcl.ac.uk), Cameron Shand (c.shand@ucl.ac.uk), Neil Oxtoby (n.oxtoby@ucl.ac.uk)
 ###
 from abc import ABC, abstractmethod
 
@@ -32,7 +32,7 @@ import multiprocessing
 from functools import partial, partialmethod
 
 import time
-import pathos
+from concurrent.futures import ProcessPoolExecutor
 
 #*******************************************
 #The data structure class for AbstractSustain. It has no data itself - the implementations of AbstractSustain need to define their own implementations of this class.
@@ -108,13 +108,9 @@ class AbstractSustain(ABC):
         self.use_parallel_startpoints   = use_parallel_startpoints
 
         if self.use_parallel_startpoints:
-            np_version                  = float(np.__version__.split('.')[0] + '.' + np.__version__.split('.')[1])
-            assert np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly."
-
-            self.pool                   = pathos.multiprocessing.ProcessingPool() #pathos.multiprocessing.ParallelPool()
-            self.pool.ncpus             = multiprocessing.cpu_count()
+            self.n_workers = int(os.environ.get('OMP_NUM_THREADS', multiprocessing.cpu_count()))
         else:
-            self.pool                   = pathos.serial.SerialPool()
+            self.n_workers = 1
 
     #********************* PUBLIC METHODS
     def run_sustain_algorithm(self, plot=False, plot_format="png", **kwargs):
@@ -391,7 +387,8 @@ class AbstractSustain(ABC):
                     mean_likelihood_subj_test_cval    = mean_likelihood_subj_test
                 else:
                     mean_likelihood_subj_test_cval    = np.concatenate((mean_likelihood_subj_test_cval, mean_likelihood_subj_test), axis=0)
-
+            string = "subtype" if s==0 else "subtypes"
+            print(f"{s+1}-{string} model: {mean_likelihood_subj_test_cval = }")
             CVIC[s]                     = -2*sum(np.log(mean_likelihood_subj_test_cval))
 
         print("CVIC for each subtype model: " + str(CVIC))
@@ -553,11 +550,11 @@ class AbstractSustain(ABC):
             total_prob_subtype_stage        = self._calculate_likelihood(sustainData, this_S, this_f)
 
             total_prob_subtype              = total_prob_subtype.reshape(len(total_prob_subtype), N_S)
-            total_prob_subtype_norm         = total_prob_subtype        / np.tile(np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
-            total_prob_stage_norm           = total_prob_stage          / np.tile(np.sum(total_prob_stage, 1).reshape(len(total_prob_stage), 1),          (1, nStages + 1)) #removed total_prob_subtype
+            total_prob_subtype_norm         = total_prob_subtype        / np.tile(1e-250+np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
+            total_prob_stage_norm           = total_prob_stage          / np.tile(1e-250+np.sum(total_prob_stage, 1).reshape(len(total_prob_stage), 1),          (1, nStages + 1)) #removed total_prob_subtype
 
             #total_prob_subtype_stage_norm   = total_prob_subtype_stage  / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1), 1).reshape(nSamples, 1, 1),   (1, nStages + 1, N_S))
-            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1, keepdims=True), 2).reshape(nSamples, 1, 1),(1, nStages + 1, N_S))
+            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.tile(1e-250+np.sum(np.sum(total_prob_subtype_stage, 1, keepdims=True), 2).reshape(nSamples, 1, 1),(1, nStages + 1, N_S))
 
             prob_subtype_stage              = (i / (i + 1.) * prob_subtype_stage)   + (1. / (i + 1.) * total_prob_subtype_stage_norm)
             prob_subtype                    = (i / (i + 1.) * prob_subtype)         + (1. / (i + 1.) * total_prob_subtype_norm)
@@ -587,7 +584,8 @@ class AbstractSustain(ABC):
                     except:
                         prob_ml_subtype[i]  = this_prob_subtype[this_subtype[0][0]]
 
-            this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
+            #this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
+            this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i].squeeze())])
             
             if (np.sum(np.isnan(this_prob_stage)) == 0):
                 # this_stage = 
@@ -630,7 +628,7 @@ class AbstractSustain(ABC):
 
             ml_sequence_prev                = ml_sequence_prev.reshape(ml_sequence_prev.shape[0], ml_sequence_prev.shape[1])
             p_sequence                      = p_sequence.reshape(p_sequence.shape[0], N_S - 1)
-            p_sequence_norm                 = p_sequence / np.tile(np.sum(p_sequence, 1).reshape(len(p_sequence), 1), (N_S - 1))
+            p_sequence_norm                 = p_sequence / np.tile(1e-250 + np.sum(p_sequence, 1).reshape(len(p_sequence), 1), (N_S - 1))
 
             # Assign individuals to a subtype (cluster) based on the previous model
             ml_cluster_subj                 = np.zeros((sustainData.getNumSamples(), 1))   #np.zeros((len(data_local), 1))
@@ -709,10 +707,13 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_iteration, sustainData)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        seed_list = seed_sequences.spawn(self.N_startpoints)
 
-        if ~isinstance(pool_output_list, list):
-            pool_output_list                = list(pool_output_list)
+        if self.use_parallel_startpoints:
+            with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+                pool_output_list = list(executor.map(partial_iter, seed_list))
+        else:
+            pool_output_list = list(map(partial_iter, seed_list))
 
         ml_sequence_mat                     = np.zeros((1, sustainData.getNumStages(), self.N_startpoints)) #np.zeros((1, self.stage_zscore.shape[1], self.N_startpoints))
         ml_f_mat                            = np.zeros((1, self.N_startpoints))
@@ -764,10 +765,13 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_split_iteration, sustainData)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        seed_list = seed_sequences.spawn(self.N_startpoints)
 
-        if ~isinstance(pool_output_list, list):
-            pool_output_list                = list(pool_output_list)
+        if self.use_parallel_startpoints:
+            with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+                pool_output_list = list(executor.map(partial_iter, seed_list))
+        else:
+            pool_output_list = list(map(partial_iter, seed_list))
 
         ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))
         ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
@@ -838,10 +842,13 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        seed_list = seed_sequences.spawn(self.N_startpoints)
 
-        if ~isinstance(pool_output_list, list):
-            pool_output_list                = list(pool_output_list)
+        if self.use_parallel_startpoints:
+            with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
+                pool_output_list = list(executor.map(partial_iter, seed_list))
+        else:
+            pool_output_list = list(map(partial_iter, seed_list))
 
         ml_sequence_mat                     = np.zeros((N_S, sustainData.getNumStages(), self.N_startpoints))
         ml_f_mat                            = np.zeros((N_S, self.N_startpoints))
