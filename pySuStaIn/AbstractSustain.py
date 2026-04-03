@@ -30,6 +30,7 @@ import csv
 import os
 import multiprocessing
 from functools import partial, partialmethod
+from scipy.stats import ttest_ind
 
 import time
 import pathos
@@ -271,6 +272,7 @@ class AbstractSustain(ABC):
         is_full                             = Nfolds == len(test_idxs)
 
         loglike_matrix                      = np.zeros((Nfolds, self.N_S_max))
+        loglike_matrix_train                = np.zeros((Nfolds, self.N_S_max))
 
         for fold in tqdm(select_fold, "Folds: ", Nfolds, position=0, leave=True):
 
@@ -306,9 +308,11 @@ class AbstractSustain(ABC):
                     samples_f               = loaded_variables["samples_f"]
 
                     mean_likelihood_subj_test = loaded_variables["mean_likelihood_subj_test"]
+                    mean_likelihood_subj_train = loaded_variables["mean_likelihood_subj_train"]
                     pickle_file.close()
 
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
+                    samples_likelihood_subj_train = self._evaluate_likelihood_setofsamples(sustainData_train, samples_sequence, samples_f)
 
                 else:
                     ml_sequence_EM,         \
@@ -329,8 +333,10 @@ class AbstractSustain(ABC):
                     samples_likelihood           = self._estimate_uncertainty_sustain_model(sustainData_train, seq_init, f_init)
 
                     samples_likelihood_subj_test = self._evaluate_likelihood_setofsamples(sustainData_test, samples_sequence, samples_f)
+                    samples_likelihood_subj_train = self._evaluate_likelihood_setofsamples(sustainData_train, samples_sequence, samples_f)
 
                     mean_likelihood_subj_test    = np.mean(samples_likelihood_subj_test,axis=1)
+                    mean_likelihood_subj_train    = np.mean(samples_likelihood_subj_train,axis=1)
 
                     ml_sequence_prev_EM         = ml_sequence_EM
                     ml_f_prev_EM                = ml_f_EM
@@ -346,6 +352,7 @@ class AbstractSustain(ABC):
                     save_variables["samples_likelihood"]                = samples_likelihood
 
                     save_variables["mean_likelihood_subj_test"]         = mean_likelihood_subj_test
+                    save_variables["mean_likelihood_subj_train"]         = mean_likelihood_subj_train
 
                     pickle_file                     = open(pickle_filename_fold_s, 'wb')
                     pickle_output                   = pickle.dump(save_variables, pickle_file)
@@ -353,10 +360,26 @@ class AbstractSustain(ABC):
 
                 if is_full:
                     loglike_matrix[fold, s]         = np.mean(np.sum(np.log(samples_likelihood_subj_test + 1e-250),axis=0))
+                    loglike_matrix_train[fold, s]         = np.mean(np.sum(np.log(samples_likelihood_subj_train + 1e-250),axis=0))
+                    
 
         if not is_full:
             print("Cannot calculate CVIC and loglike_matrix without all folds. Rerun cross_validate_sustain_model after all folds calculated.")
             return [], []
+
+        def BIC(logML, k):
+            res = k * np.log(len(indx_train)) -2*logML
+            return(res)
+        
+        nStages                             = len(ml_sequence_EM)
+
+        for s in range(self.N_S_max-1):
+            ST1BIC=BIC(loglike_matrix_train[:,0:s+1],(s+1)*nStages)
+            ST2BIC=BIC(loglike_matrix_train[:,s+1:s+2],(s+2)*nStages)
+            w, p = stats.ttest_rel(ST1BIC,ST2BIC)
+            print(f't-test between BIC of models with upto subtype{s} and subtype{s+1} is: t={w[0]:.3f} , p-val={p[0]:.8f}')
+
+
 
         print(f"Average test set log-likelihood for each subtype model: {np.mean(loglike_matrix, 0)}")
 
