@@ -914,16 +914,16 @@ class AbstractSustain(ABC):
         N_S                                 = S.shape[0]
         N                                   = sustainData.getNumStages()    #self.stage_zscore.shape[1]
 
-        f_broadcast                         = np.asarray(f).reshape(1, 1, N_S)
+        f                                   = np.asarray(f).flatten()  # (N_S,)
 
         p_perm_k                            = np.zeros((M, N + 1, N_S))
 
         for s in range(N_S):
-            p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S[s])  #self.__calculate_likelihood_stage_linearzscoremodel_approx(data_local, S[s])
+            p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S[s])
 
-
-        total_prob_cluster                  = np.squeeze(np.sum(p_perm_k * f_broadcast, 1))
-        total_prob_stage                    = np.sum(p_perm_k * f_broadcast, 2)
+        # Use einsum to fuse multiply-and-sum, avoiding (M, N+1, N_S) temporaries
+        total_prob_stage                    = np.einsum('jks,s->jk', p_perm_k, f)  # (M, N+1)
+        total_prob_cluster                  = np.einsum('jks,s->js', p_perm_k, f)  # (M, N_S)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
         loglike                             = np.sum(np.log(total_prob_subj + 1e-250))
