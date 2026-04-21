@@ -862,14 +862,10 @@ class AbstractSustain(ABC):
 
         terminate                           = 0
         iteration                           = 0
-        samples_sequence                    = np.full((MaxIter, N, N_S), np.nan)
-        samples_f                           = np.full((MaxIter, N_S), np.nan)
-        samples_likelihood                  = np.full((MaxIter, 1), np.nan)
-
-        samples_sequence[0, :, :]           = current_sequence.reshape(current_sequence.shape[1], current_sequence.shape[0])
+        samples_sequence                    = [current_sequence.reshape(current_sequence.shape[1], current_sequence.shape[0])]
         current_f                           = np.array(current_f).reshape(len(current_f))
-        samples_f[0, :]                     = current_f
-        samples_likelihood[0]               = current_likelihood
+        samples_f                           = [current_f.copy()]
+        samples_likelihood                  = [current_likelihood]
         while terminate == 0:
 
             candidate_sequence,     \
@@ -886,9 +882,9 @@ class AbstractSustain(ABC):
                     current_f               = candidate_f
                     current_likelihood      = candidate_likelihood
 
-            samples_sequence[iteration, :, :] = current_sequence.T.reshape(current_sequence.T.shape[0], N_S)
-            samples_f[iteration, :]         = current_f
-            samples_likelihood[iteration]   = current_likelihood
+            samples_sequence.append(current_sequence.T.reshape(current_sequence.T.shape[0], N_S))
+            samples_f.append(current_f.copy())
+            samples_likelihood.append(current_likelihood)
 
             if iteration == (MaxIter - 1):
                 terminate                   = 1
@@ -897,6 +893,10 @@ class AbstractSustain(ABC):
         ml_sequence                         = current_sequence
         ml_f                                = current_f
         ml_likelihood                       = current_likelihood
+        samples_sequence                    = np.array(samples_sequence)
+        samples_f                           = np.array(samples_f)
+        samples_likelihood                  = np.array(samples_likelihood)
+
         return ml_sequence, ml_f, ml_likelihood, samples_sequence, samples_f, samples_likelihood
 
     def _calculate_likelihood(self, sustainData, S, f):
