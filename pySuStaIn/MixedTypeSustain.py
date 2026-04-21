@@ -460,7 +460,7 @@ class MixedTypeSustain(AbstractSustain):
             zscored_data = np.array(sustainData.zdata[:, :, None], dtype=np.float64)
             x = zscored_data - stage_value_zscore
             x = np.transpose(x, (0, 2, 1))
-            p_perm_k_biomarkers[:, :, self.bool_zscore_biomarkers] = stats.norm.pdf(x)
+            p_perm_k_biomarkers[:, :, self.bool_zscore_biomarkers] = np.exp(-0.5 * x * x) / np.sqrt(2.0 * np.pi)
 
         if n_ordinal_event > 0:
             stage_value_ordinal_event = np.zeros((self.num_stages + 1, self.num_biomarkers))
