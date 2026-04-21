@@ -558,8 +558,21 @@ class MixedTypeSustain(AbstractSustain):
                     move_event_to = possible_positions[index]
 
                     # move this event in its new position
-                    current_sequence = np.delete(current_sequence, move_event_from, 0)  # this is different to the Matlab version, which call current_sequence(move_event_from) = []
-                    new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                    # Move selected_event from move_event_from to move_event_to
+                    # without intermediate allocations from delete+concatenate
+                    new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                    if move_event_from < int(move_event_to):
+                        new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                        new_sequence[move_event_from:int(move_event_to)] = current_sequence[move_event_from+1:int(move_event_to)+1]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:] = current_sequence[int(move_event_to)+1:]
+                    elif move_event_from > int(move_event_to):
+                        new_sequence[:int(move_event_to)] = current_sequence[:int(move_event_to)]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:move_event_from+1] = current_sequence[int(move_event_to):move_event_from]
+                        new_sequence[move_event_from+1:] = current_sequence[move_event_from+1:]
+                    else:
+                        new_sequence[:] = current_sequence
                     possible_sequences[index, :] = new_sequence
 
                     possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
@@ -658,8 +671,21 @@ class MixedTypeSustain(AbstractSustain):
                     index = self.global_rng.choice(range(len(possible_positions)), 1, replace=True, p=weight)
                     move_event_to = possible_positions[index]
 
-                    current_sequence = np.delete(current_sequence, move_event_from, 0)
-                    new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                    # Move selected_event from move_event_from to move_event_to
+                    # without intermediate allocations from delete+concatenate
+                    new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                    if move_event_from < int(move_event_to):
+                        new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                        new_sequence[move_event_from:int(move_event_to)] = current_sequence[move_event_from+1:int(move_event_to)+1]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:] = current_sequence[int(move_event_to)+1:]
+                    elif move_event_from > int(move_event_to):
+                        new_sequence[:int(move_event_to)] = current_sequence[:int(move_event_to)]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:move_event_from+1] = current_sequence[int(move_event_to):move_event_from]
+                        new_sequence[move_event_from+1:] = current_sequence[move_event_from+1:]
+                    else:
+                        new_sequence[:] = current_sequence
                     samples_sequence[subtype_idx, :, iter_idx] = new_sequence
 
                 new_f = samples_f[:, iter_idx - 1] + f_sigma * self.global_rng.standard_normal()

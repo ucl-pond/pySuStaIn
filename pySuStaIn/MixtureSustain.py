@@ -247,8 +247,11 @@ class MixtureSustain(AbstractSustain):
                     possible_likelihood = np.zeros((N, 1))
                     possible_p_perm_k = np.zeros((M, N + 1, N))
 
-                    current_sequence = np.delete(current_sequence, move_event_from, 0)
-                    new_sequence = np.append(current_sequence, selected_event)
+                    # Remove element at move_event_from and append selected_event at end
+                    new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                    new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                    new_sequence[move_event_from:N-1] = current_sequence[move_event_from+1:N]
+                    new_sequence[N-1] = selected_event
 
                     temp_p_perm_k, cp_yes, cp_no, cp_no_org = self._calculate_likelihood_subset(sustainData.L_yes, sustainData.L_no, new_sequence)
                     p_perm_k[:, :, s] = temp_p_perm_k
@@ -300,8 +303,21 @@ class MixtureSustain(AbstractSustain):
                         move_event_to           = possible_positions[index]
 
                         #move this event in its new position
-                        current_sequence        = np.delete(current_sequence, move_event_from, 0)  # this is different to the Matlab version, which call current_sequence(move_event_from) = []
-                        new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                        # Move selected_event from move_event_from to move_event_to
+                        # without intermediate allocations from delete+concatenate
+                        new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                        if move_event_from < int(move_event_to):
+                            new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                            new_sequence[move_event_from:int(move_event_to)] = current_sequence[move_event_from+1:int(move_event_to)+1]
+                            new_sequence[int(move_event_to)] = selected_event
+                            new_sequence[int(move_event_to)+1:] = current_sequence[int(move_event_to)+1:]
+                        elif move_event_from > int(move_event_to):
+                            new_sequence[:int(move_event_to)] = current_sequence[:int(move_event_to)]
+                            new_sequence[int(move_event_to)] = selected_event
+                            new_sequence[int(move_event_to)+1:move_event_from+1] = current_sequence[int(move_event_to):move_event_from]
+                            new_sequence[move_event_from+1:] = current_sequence[move_event_from+1:]
+                        else:
+                            new_sequence[:] = current_sequence
                         possible_sequences[index, :] = new_sequence
 
                         possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
