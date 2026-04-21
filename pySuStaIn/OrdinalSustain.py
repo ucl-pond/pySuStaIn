@@ -177,8 +177,8 @@ class OrdinalSustain(AbstractSustain):
 
         B = sustainData.prob_nl.shape[1]
     
-        IS_normal = np.ones(B)
-        IS_abnormal = np.zeros(B)
+        IS_normal = np.ones(B, dtype=bool)
+        IS_abnormal = np.zeros(B, dtype=bool)
         index_reached = np.zeros(B,dtype=int)
 
         M = sustainData.prob_score.shape[0]
@@ -189,11 +189,9 @@ class OrdinalSustain(AbstractSustain):
             index_justreached = int(S[j])
             biomarker_justreached = int(self.stage_biomarker_index[:,index_justreached])
             index_reached[biomarker_justreached] = index_justreached
-            IS_normal[biomarker_justreached] = 0
-            IS_abnormal[biomarker_justreached] = 1
-            bool_IS_normal = IS_normal.astype(bool)
-            bool_IS_abnormal = IS_abnormal.astype(bool)
-            p_perm_k[:,j+1] = 1/(N+1)*np.multiply(np.prod(sustainData.prob_score[:,index_reached[bool_IS_abnormal]],1),np.prod(sustainData.prob_nl[:,bool_IS_normal],1))
+            IS_normal[biomarker_justreached] = False
+            IS_abnormal[biomarker_justreached] = True
+            p_perm_k[:,j+1] = 1/(N+1)*np.multiply(np.prod(sustainData.prob_score[:,index_reached[IS_abnormal]],1),np.prod(sustainData.prob_nl[:,IS_normal],1))
 
         return p_perm_k
 
@@ -205,30 +203,23 @@ class OrdinalSustain(AbstractSustain):
         N                                   = self.stage_score.shape[1]
 
         S_opt                               = S_init.copy()  # have to copy or changes will be passed to S_init
-        f_opt                               = np.array(f_init).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt                               = np.asarray(f_init).reshape(1, 1, N_S)
         p_perm_k                            = np.zeros((M, N + 1, N_S))
 
         for s in range(N_S):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
-        p_perm_k_weighted                   = p_perm_k * f_val_mat
-        #p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
-        # adding 1e-250 fixes divide by zero problem that happens rarely
+        p_perm_k_weighted                   = p_perm_k * f_opt
         p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
 
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt                               = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
         order_seq                           = rng.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
             order_bio                       = rng.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence            = S_opt[s]
-                current_location            = np.array([0] * len(current_sequence))
-                current_location[current_sequence.astype(int)] = np.arange(len(current_sequence))
+                current_location            = np.argsort(current_sequence.astype(int))
 
                 selected_event              = i
 
@@ -238,19 +229,18 @@ class OrdinalSustain(AbstractSustain):
                 selected_biomarker          = self.stage_biomarker_index[0, selected_event]
                 possible_scores_biomarker  = self.stage_score[self.stage_biomarker_index == selected_biomarker]
 
-                # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
                 min_filter                  = possible_scores_biomarker < this_stage_score
                 max_filter                  = possible_scores_biomarker > this_stage_score
-                events                      = np.array(range(N))
+                events                      = np.arange(N)
                 if np.any(min_filter):
                     min_score_bound        = max(possible_scores_biomarker[min_filter])
-                    min_score_bound_event  = events[((self.stage_score[0] == min_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    min_score_bound_event  = events[np.logical_and(self.stage_score[0] == min_score_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                     move_event_to_lower_bound = current_location[min_score_bound_event] + 1
                 else:
                     move_event_to_lower_bound = 0
                 if np.any(max_filter):
                     max_score_bound        = min(possible_scores_biomarker[max_filter])
-                    max_score_bound_event  = events[((self.stage_score[0] == max_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    max_score_bound_event  = events[np.logical_and(self.stage_score[0] == max_score_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                     move_event_to_upper_bound = current_location[max_score_bound_event]
                 else:
                     move_event_to_upper_bound = N
@@ -276,9 +266,9 @@ class OrdinalSustain(AbstractSustain):
                     possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
 
                     p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
-                    total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
+                    total_prob_stage        = np.sum(p_perm_k * f_opt, 2)
                     total_prob_subj         = np.sum(total_prob_stage, 1)
-                    possible_likelihood[index] = sum(np.log(total_prob_subj + 1e-250))
+                    possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
                 possible_likelihood         = possible_likelihood.reshape(possible_likelihood.shape[0])
                 max_likelihood              = max(possible_likelihood)
@@ -290,18 +280,15 @@ class OrdinalSustain(AbstractSustain):
 
             S_opt[s]                        = this_S
 
-        p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
-
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        p_perm_k_weighted                   = p_perm_k * f_opt
+        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
+        f_opt                               = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
 
         f_opt                               = f_opt.reshape(N_S)
-        total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
+        total_prob_stage                    = np.sum(p_perm_k * f_opt, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
-        likelihood_opt                      = sum(np.log(total_prob_subj + 1e-250))
+        likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
 
         return S_opt, f_opt, likelihood_opt
 
@@ -330,8 +317,7 @@ class OrdinalSustain(AbstractSustain):
                     move_event_from         = int(np.ceil(N * self.global_rng.random())) - 1
                     current_sequence        = samples_sequence[s, :, i - 1]
 
-                    current_location        = np.array([0] * N)
-                    current_location[current_sequence.astype(int)] = np.arange(N)
+                    current_location        = np.argsort(current_sequence.astype(int))
 
                     selected_event          = int(current_sequence[move_event_from])
                     this_stage_score       = self.stage_score[0, selected_event]
@@ -341,17 +327,17 @@ class OrdinalSustain(AbstractSustain):
                     # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
                     min_filter              = possible_scores_biomarker < this_stage_score
                     max_filter              = possible_scores_biomarker > this_stage_score
-                    events                  = np.array(range(N))
+                    events                  = np.arange(N)
                     if np.any(min_filter):
                         min_score_bound            = max(possible_scores_biomarker[min_filter])
-                        min_score_bound_event      = events[((self.stage_score[0] == min_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                        min_score_bound_event      = events[np.logical_and(self.stage_score[0] == min_score_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                         move_event_to_lower_bound   = current_location[min_score_bound_event] + 1
                     else:
                         move_event_to_lower_bound   = 0
 
                     if np.any(max_filter):
                         max_score_bound            = min(possible_scores_biomarker[max_filter])
-                        max_score_bound_event      = events[((self.stage_score[0] == max_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                        max_score_bound_event      = events[np.logical_and(self.stage_score[0] == max_score_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                         move_event_to_upper_bound   = current_location[max_score_bound_event]
                     else:
                         move_event_to_upper_bound   = N
@@ -390,15 +376,14 @@ class OrdinalSustain(AbstractSustain):
             samples_likelihood[i]           = likelihood_sample
 
             if i > 0:
-                ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
-                if ratio < self.global_rng.random():
+                log_ratio                       = samples_likelihood[i] - samples_likelihood[i - 1]
+                if log_ratio < np.log(self.global_rng.random()):
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
 
-        perm_index                          = np.where(samples_likelihood == max(samples_likelihood))
-        perm_index                          = perm_index[0]
-        ml_likelihood                       = max(samples_likelihood)
+        perm_index                          = np.argmax(samples_likelihood)
+        ml_likelihood                       = np.max(samples_likelihood)
         ml_sequence                         = samples_sequence[:, :, perm_index]
         ml_f                                = samples_f[:, perm_index]
 
