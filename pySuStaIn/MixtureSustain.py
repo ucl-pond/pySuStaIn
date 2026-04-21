@@ -220,24 +220,17 @@ class MixtureSustain(AbstractSustain):
         N                                   = sustainData.getNumStages()
 
         S_opt                               = S_init.copy()  # have to copy or changes will be passed to S_init
-        f_opt                               = np.array(f_init).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt                               = np.asarray(f_init).reshape(1, 1, N_S)
         p_perm_k                            = np.zeros((M, N + 1, N_S))
 
         for s in range(N_S):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
-        p_perm_k_weighted                   = p_perm_k * f_val_mat
-        # the second summation axis is different to Matlab version
-        #p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))
-        # adding 1e-250 fixes divide by zero problem that happens rarely
+        p_perm_k_weighted                   = p_perm_k * f_opt
         p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
 
-        f_opt                               = (np.squeeze(np.sum(p_perm_k_norm, axis = (1, 0))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
-        order_seq                           = rng.permutation(N_S)    #np.random.permutation(N_S)  # this will produce different random numbers to Matlab
+        f_opt                               = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
+        order_seq                           = rng.permutation(N_S)
 
         for s in order_seq:
             order_bio                       = rng.permutation(N) #np.random.permutation(N)  # this will produce different random numbers to Matlab
@@ -246,8 +239,7 @@ class MixtureSustain(AbstractSustain):
                 for i in order_bio:
                     current_sequence = S_opt[s]
                     assert(len(current_sequence) == N)
-                    current_location = np.zeros(N, dtype = int)
-                    current_location[current_sequence.astype(int)] = np.arange(N)
+                    current_location = np.argsort(current_sequence.astype(int))
 
                     selected_event = i
                     move_event_from = current_location[selected_event]
@@ -262,7 +254,7 @@ class MixtureSustain(AbstractSustain):
                     p_perm_k[:, :, s] = temp_p_perm_k
                     possible_p_perm_k[:, :, N - 1] = temp_p_perm_k
 
-                    total_prob_stage = np.sum(p_perm_k * f_val_mat, 2)
+                    total_prob_stage = np.sum(p_perm_k * f_opt, 2)
                     total_prob_subj = np.sum(total_prob_stage, axis=1)
                     possible_likelihood[N - 1] = np.sum(np.log(total_prob_subj + 1e-250))
 
@@ -272,10 +264,9 @@ class MixtureSustain(AbstractSustain):
                                                                                             position, cp_yes, cp_no, 
                                                                                             cp_no_org)
                         
-                        # calculate log_likelihood
                         p_perm_k[:, :, s] = temp_p_perm_k
                         possible_p_perm_k[:, :, position] = temp_p_perm_k
-                        total_prob_stage = np.sum(p_perm_k * f_val_mat, 2)
+                        total_prob_stage = np.sum(p_perm_k * f_opt, 2)
                         total_prob_subj = np.sum(total_prob_stage, 1)
                         possible_likelihood[position] = np.sum(np.log(total_prob_subj + 1e-250))
 
@@ -292,8 +283,7 @@ class MixtureSustain(AbstractSustain):
                 for i in order_bio:
                     current_sequence            = S_opt[s]
                     assert(len(current_sequence)==N)
-                    current_location            = np.array([0] * N)
-                    current_location[current_sequence.astype(int)] = np.arange(N)
+                    current_location            = np.argsort(current_sequence.astype(int))
 
                     selected_event              = i
 
@@ -317,7 +307,7 @@ class MixtureSustain(AbstractSustain):
                         possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
 
                         p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
-                        total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
+                        total_prob_stage        = np.sum(p_perm_k * f_opt, 2)
                         total_prob_subj         = np.sum(total_prob_stage, 1)
                         possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
@@ -331,15 +321,12 @@ class MixtureSustain(AbstractSustain):
 
                 S_opt[s]                        = this_S
 
-        p_perm_k_weighted                   = p_perm_k * f_val_mat
-        p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
-        f_opt                               = (np.squeeze(np.sum(p_perm_k_norm, axis = (1, 0))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
-
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        p_perm_k_weighted                   = p_perm_k * f_opt
+        p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
+        f_opt                               = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
 
         f_opt                               = f_opt.reshape(N_S)
-        total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
+        total_prob_stage                    = np.sum(p_perm_k * f_opt, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
         likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
@@ -410,12 +397,9 @@ class MixtureSustain(AbstractSustain):
             for s in range(N_S):
                 p_perm_k[:,:,s]             = self._calculate_likelihood_stage(sustainData, S[s,:])
 
+            f_broadcast                     = samples_f[:,i].reshape(1, 1, N_S)
 
-            #NOTE: added extra axes to get np.tile to work the same as Matlab's repmat in this 3D tiling
-            f_val_mat                       = np.tile(samples_f[:,i, np.newaxis, np.newaxis], (1, N+1, M))
-            f_val_mat                       = np.transpose(f_val_mat, (2, 1, 0))
-
-            total_prob_stage                = np.sum(p_perm_k * f_val_mat, 2)
+            total_prob_stage                = np.sum(p_perm_k * f_broadcast, 2)
             total_prob_subj                 = np.sum(total_prob_stage, 1)
 
             likelihood_sample               = np.sum(np.log(total_prob_subj + 1e-250))
@@ -423,14 +407,13 @@ class MixtureSustain(AbstractSustain):
             samples_likelihood[i]           = likelihood_sample
 
             if i > 0:
-                ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
-                if ratio < self.global_rng.random():
+                log_ratio                       = samples_likelihood[i] - samples_likelihood[i - 1]
+                if log_ratio < np.log(self.global_rng.random()):
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
 
-        perm_index                          = np.where(samples_likelihood == np.max(samples_likelihood))
-        perm_index                          = perm_index[0][0]
+        perm_index                          = np.argmax(samples_likelihood)
         ml_likelihood                       = np.max(samples_likelihood)
         ml_sequence                         = samples_sequence[:, :, perm_index]
         ml_f                                = samples_f[:, perm_index]
