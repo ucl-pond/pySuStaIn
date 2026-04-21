@@ -275,7 +275,10 @@ class AbstractSustain(ABC):
         for fold in tqdm(select_fold, "Folds: ", Nfolds, position=0, leave=True):
 
             indx_test                       = test_idxs[fold]
-            indx_train                      = np.array([x for x in range(self.__sustainData.getNumSamples()) if x not in indx_test])
+            all_idxs                        = np.arange(self.__sustainData.getNumSamples())
+            mask                            = np.ones(self.__sustainData.getNumSamples(), dtype=bool)
+            mask[indx_test]                 = False
+            indx_train                      = all_idxs[mask]
 
             sustainData_train               = self.__sustainData.reindex(indx_train)
             sustainData_test                = self.__sustainData.reindex(indx_test)
@@ -392,7 +395,7 @@ class AbstractSustain(ABC):
                 else:
                     mean_likelihood_subj_test_cval    = np.concatenate((mean_likelihood_subj_test_cval, mean_likelihood_subj_test), axis=0)
 
-            CVIC[s]                     = -2*sum(np.log(mean_likelihood_subj_test_cval))
+            CVIC[s]                     = -2*np.sum(np.log(mean_likelihood_subj_test_cval))
 
         print("CVIC for each subtype model: " + str(CVIC))
 
@@ -553,51 +556,30 @@ class AbstractSustain(ABC):
             total_prob_subtype_stage        = self._calculate_likelihood(sustainData, this_S, this_f)
 
             total_prob_subtype              = total_prob_subtype.reshape(len(total_prob_subtype), N_S)
-            total_prob_subtype_norm         = total_prob_subtype        / np.tile(np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
-            total_prob_stage_norm           = total_prob_stage          / np.tile(np.sum(total_prob_stage, 1).reshape(len(total_prob_stage), 1),          (1, nStages + 1)) #removed total_prob_subtype
+            total_prob_subtype_norm         = total_prob_subtype / np.sum(total_prob_subtype, 1, keepdims=True)
+            total_prob_stage_norm           = total_prob_stage / np.sum(total_prob_stage, 1, keepdims=True) #removed total_prob_subtype
 
-            #total_prob_subtype_stage_norm   = total_prob_subtype_stage  / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1), 1).reshape(nSamples, 1, 1),   (1, nStages + 1, N_S))
-            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1, keepdims=True), 2).reshape(nSamples, 1, 1),(1, nStages + 1, N_S))
+            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.sum(total_prob_subtype_stage, axis=(1, 2), keepdims=True)
 
             prob_subtype_stage              = (i / (i + 1.) * prob_subtype_stage)   + (1. / (i + 1.) * total_prob_subtype_stage_norm)
             prob_subtype                    = (i / (i + 1.) * prob_subtype)         + (1. / (i + 1.) * total_prob_subtype_norm)
             prob_stage                      = (i / (i + 1.) * prob_stage)           + (1. / (i + 1.) * total_prob_stage_norm)
 
-        ml_subtype                          = np.nan * np.ones((nSamples, 1))
-        prob_ml_subtype                     = np.nan * np.ones((nSamples, 1))
-        ml_stage                            = np.nan * np.ones((nSamples, 1))
-        prob_ml_stage                       = np.nan * np.ones((nSamples, 1))
+        ml_subtype                          = np.full((nSamples, 1), np.nan)
+        prob_ml_subtype                     = np.full((nSamples, 1), np.nan)
+        ml_stage                            = np.full((nSamples, 1), np.nan)
+        prob_ml_stage                       = np.full((nSamples, 1), np.nan)
+
+        valid_subtype                       = np.sum(np.isnan(prob_subtype), axis=1) == 0
+        ml_subtype[valid_subtype]           = np.argmax(prob_subtype[valid_subtype], axis=1, keepdims=True)
+        prob_ml_subtype[valid_subtype]      = np.take_along_axis(prob_subtype[valid_subtype], (ml_subtype[valid_subtype]).astype(int), axis=1)
 
         for i in range(nSamples):
-            this_prob_subtype               = np.atleast_1d(np.squeeze(prob_subtype[i, :]))
-            # if not np.isnan(this_prob_subtype).any()
-            if (np.sum(np.isnan(this_prob_subtype)) == 0):
-                # this_subtype = this_prob_subtype.argmax(
-                this_subtype                = np.where(this_prob_subtype == np.max(this_prob_subtype))
-
-                try:
-                    ml_subtype[i]           = this_subtype
-                except:
-                    ml_subtype[i]           = this_subtype[0][0]
-                if this_prob_subtype.size == 1 and this_prob_subtype == 1:
-                    prob_ml_subtype[i]      = 1
-                else:
-                    try:
-                        prob_ml_subtype[i]  = this_prob_subtype[this_subtype]
-                    except:
-                        prob_ml_subtype[i]  = this_prob_subtype[this_subtype[0][0]]
-
-            this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
-            
-            if (np.sum(np.isnan(this_prob_stage)) == 0):
-                # this_stage = 
-                this_stage                  = np.where(this_prob_stage == np.max(this_prob_stage))
-                ml_stage[i]                 = this_stage[0][0]
-                prob_ml_stage[i]            = this_prob_stage[this_stage[0][0]]
-        # NOTE: The above loop can be replaced with some simpler numpy calls
-        # May need to do some masking to avoid NaNs, or use `np.nanargmax` depending on preference
-        # E.g. ml_subtype == prob_subtype.argmax(1)
-        # E.g. ml_stage == prob_subtype_stage[np.arange(prob_subtype_stage.shape[0]), :, ml_subtype].argmax(1)
+            if valid_subtype[i]:
+                this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
+                if np.sum(np.isnan(this_prob_stage)) == 0:
+                    ml_stage[i]                 = np.argmax(this_prob_stage)
+                    prob_ml_stage[i]            = this_prob_stage[int(ml_stage[i])]
         return ml_subtype, prob_ml_subtype, ml_stage, prob_ml_stage, prob_subtype, prob_stage, prob_subtype_stage
 
     # ********************* PROTECTED METHODS
@@ -630,20 +612,13 @@ class AbstractSustain(ABC):
 
             ml_sequence_prev                = ml_sequence_prev.reshape(ml_sequence_prev.shape[0], ml_sequence_prev.shape[1])
             p_sequence                      = p_sequence.reshape(p_sequence.shape[0], N_S - 1)
-            p_sequence_norm                 = p_sequence / np.tile(np.sum(p_sequence, 1).reshape(len(p_sequence), 1), (N_S - 1))
+            p_sequence_norm                 = p_sequence / np.sum(p_sequence, 1, keepdims=True)
 
-            # Assign individuals to a subtype (cluster) based on the previous model
-            ml_cluster_subj                 = np.zeros((sustainData.getNumSamples(), 1))   #np.zeros((len(data_local), 1))
-            for m in range(sustainData.getNumSamples()):                                   #range(len(data_local)):
-                ix                          = np.argmax(p_sequence_norm[m, :]) + 1
-
-                #TEMP: MATLAB comparison
-                #ml_cluster_subj[m]          = ix*np.ceil(np.random.rand())
-                ml_cluster_subj[m]          = ix  # FIXME: should check this always works, as it differs to the Matlab code, which treats ix as an array
+            ml_cluster_subj                 = (np.argmax(p_sequence_norm, axis=1) + 1).reshape(-1, 1)
 
             ml_likelihood                   = -np.inf
             for ix_cluster_split in range(N_S - 1):
-                this_N_cluster              = sum(ml_cluster_subj == int(ix_cluster_split + 1))
+                this_N_cluster              = np.sum(ml_cluster_subj == int(ix_cluster_split + 1))
 
                 if this_N_cluster > 1:
 
@@ -669,7 +644,7 @@ class AbstractSustain(ABC):
                     this_seq_init           = np.hstack((this_seq_init.T, this_ml_sequence_split[1])).T
                     
                     #initialize fraction of subjects in each subtype to be uniform
-                    this_f_init             = np.array([1.] * N_S) / float(N_S)
+                    this_f_init             = np.ones(N_S) / N_S
 
                     print(' + Finding ML solution from hierarchical initialisation')
                     this_ml_sequence,       \
@@ -778,7 +753,7 @@ class AbstractSustain(ABC):
             ml_f_mat[:, i]                  = pool_output_list[i][1]
             ml_likelihood_mat[i]            = pool_output_list[i][2]
 
-        ix                                  = [np.where(ml_likelihood_mat == max(ml_likelihood_mat))[0][0]] #ugly bit of code to get first index where likelihood is maximum
+        ix                                  = np.atleast_1d(np.argmax(ml_likelihood_mat)) #ugly bit of code to get first index where likelihood is maximum
 
         ml_sequence                         = ml_sequence_mat[:, :, ix]
         ml_f                                = ml_f_mat[:, ix]
@@ -815,7 +790,7 @@ class AbstractSustain(ABC):
             temp_seq_init                   = self._initialise_sequence(sustainData, rng)
             seq_init[s, :], _, _, _, _, _   = self._perform_em(temp_sustainData, temp_seq_init, [1], rng)
 
-        f_init                              = np.array([1.] * N_S) / float(N_S)
+        f_init                              = np.ones(N_S) / N_S
 
         # optimise the mixture of two models from the initialisation
         this_ml_sequence, \
@@ -852,8 +827,7 @@ class AbstractSustain(ABC):
             ml_f_mat[:, i]                  = pool_output_list[i][1]
             ml_likelihood_mat[i]            = pool_output_list[i][2]
 
-        ix                                  = np.where(ml_likelihood_mat == max(ml_likelihood_mat))
-        ix                                  = ix[0]
+        ix                                  = np.atleast_1d(np.argmax(ml_likelihood_mat))
 
         ml_sequence                         = ml_sequence_mat[:, :, ix]
         ml_f                                = ml_f_mat[:, ix]
@@ -888,9 +862,9 @@ class AbstractSustain(ABC):
 
         terminate                           = 0
         iteration                           = 0
-        samples_sequence                    = np.nan * np.ones((MaxIter, N, N_S))
-        samples_f                           = np.nan * np.ones((MaxIter, N_S))
-        samples_likelihood                  = np.nan * np.ones((MaxIter, 1))
+        samples_sequence                    = np.full((MaxIter, N, N_S), np.nan)
+        samples_f                           = np.full((MaxIter, N_S), np.nan)
+        samples_likelihood                  = np.full((MaxIter, 1), np.nan)
 
         samples_sequence[0, :, :]           = current_sequence.reshape(current_sequence.shape[1], current_sequence.shape[0])
         current_f                           = np.array(current_f).reshape(len(current_f))
@@ -940,9 +914,7 @@ class AbstractSustain(ABC):
         N_S                                 = S.shape[0]
         N                                   = sustainData.getNumStages()    #self.stage_zscore.shape[1]
 
-        f                                   = np.array(f).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        f_broadcast                         = np.asarray(f).reshape(1, 1, N_S)
 
         p_perm_k                            = np.zeros((M, N + 1, N_S))
 
@@ -950,8 +922,8 @@ class AbstractSustain(ABC):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S[s])  #self.__calculate_likelihood_stage_linearzscoremodel_approx(data_local, S[s])
 
 
-        total_prob_cluster                  = np.squeeze(np.sum(p_perm_k * f_val_mat, 1))
-        total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
+        total_prob_cluster                  = np.squeeze(np.sum(p_perm_k * f_broadcast, 1))
+        total_prob_stage                    = np.sum(p_perm_k * f_broadcast, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
         loglike                             = np.sum(np.log(total_prob_subj + 1e-250))
@@ -1005,13 +977,7 @@ class AbstractSustain(ABC):
                                                                                                      seq_sigma_currentpass,
                                                                                                      f_sigma_currentpass)
 
-            samples_position_currentpass    = np.zeros(samples_sequence_currentpass.shape)
-            for s in range(N_S):
-                for sample in range(n_iterations_MCMC_optimisation):
-                    temp_seq                        = samples_sequence_currentpass[s, :, sample]
-                    temp_inv                        = np.array([0] * samples_sequence_currentpass.shape[1])
-                    temp_inv[temp_seq.astype(int)]  = np.arange(samples_sequence_currentpass.shape[1])
-                    samples_position_currentpass[s, :, sample] = temp_inv
+            samples_position_currentpass    = np.argsort(samples_sequence_currentpass, axis=1)
 
             seq_sigma_currentpass           = np.std(samples_position_currentpass, axis=2, ddof=1)  # np.std is different to Matlab std, which normalises to N-1 by default
             seq_sigma_currentpass[seq_sigma_currentpass < 0.01] = 0.01  # magic number
