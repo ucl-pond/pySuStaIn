@@ -102,13 +102,19 @@ class ZscoreSustain(AbstractSustain):
         self.stage_zscore               = stage_zscore
         self.stage_biomarker_index      = stage_biomarker_index
 
-        self.min_biomarker_zscore       = [0] * N
+        self.min_biomarker_zscore       = np.zeros(N)
         self.max_biomarker_zscore       = Z_max
-        self.std_biomarker_zscore       = [1] * N
+        self.std_biomarker_zscore       = np.ones(N)
+        self.possible_biomarkers        = np.unique(self.stage_biomarker_index)
 
         self.biomarker_labels           = biomarker_labels
 
         numStages                       = stage_zscore.shape[1]
+
+        # Cache invariant constants for _calculate_likelihood_stage
+        N_events = numStages
+        self._log_factor = np.log(1. / np.sqrt(np.pi * 2.0) * self.std_biomarker_zscore)
+        self._log_coeff = np.log(1. / float(N_events + 1))
         self.__sustainData              = ZScoreSustainData(data, numStages)
 
         super().__init__(self.__sustainData,
@@ -171,9 +177,8 @@ class ZscoreSustain(AbstractSustain):
         '''
 
         N                                   = self.stage_biomarker_index.shape[1]
-        S_inv                               = np.array([0] * N)
-        S_inv[S.astype(int)]                = np.arange(N)
-        possible_biomarkers                 = np.unique(self.stage_biomarker_index)
+        S_inv                               = np.argsort(S.astype(int))
+        possible_biomarkers                 = self.possible_biomarkers
         B                                   = len(possible_biomarkers)
         point_value                         = np.zeros((B, N + 2))
 
@@ -213,10 +218,10 @@ class ZscoreSustain(AbstractSustain):
         p_perm_k                            = np.zeros((M, N + 1))
 
         # optimised likelihood calc - take log and only call np.exp once after loop
-        sigmat = np.array(self.std_biomarker_zscore)
+        sigmat = self.std_biomarker_zscore
 
-        factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
-        coeff                               = np.log(1. / float(N + 1))
+        factor                              = self._log_factor
+        coeff                               = self._log_coeff
 
         # original
         """
@@ -233,9 +238,14 @@ class ZscoreSustain(AbstractSustain):
         #     p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(x), 1)
         # p_perm_k                            = np.exp(p_perm_k)
 
-        # even faster - do in one go
-        x = (sustainData.data[:, :, None] - stage_value) / sigmat[None, :, None]
-        p_perm_k = coeff + np.sum(factor[None, :, None] - 0.5 * np.square(x), 1)
+        # Accumulate per-biomarker to avoid (J, I, K+1) intermediate tensor.
+        # Each iteration creates only (J, K+1) arrays, cutting peak memory ~3x.
+        data = sustainData.data
+        result = np.zeros((M, N + 1))
+        for i in range(data.shape[1]):
+            diff = (data[:, i, None] - stage_value[i, :]) / sigmat[i]
+            result += factor[i] - 0.5 * diff * diff
+        p_perm_k = coeff + result
         p_perm_k = np.exp(p_perm_k)
 
         return p_perm_k
@@ -249,27 +259,22 @@ class ZscoreSustain(AbstractSustain):
         N                                   = self.stage_zscore.shape[1]
 
         S_opt                               = S_init.copy()  # have to copy or changes will be passed to S_init
-        f_opt                               = np.array(f_init).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt                               = np.asarray(f_init).reshape(1, 1, N_S)
         p_perm_k                            = np.zeros((M, N + 1, N_S))
 
         for s in range(N_S):
             p_perm_k[:, :, s]               = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
-        p_perm_k_weighted                   = p_perm_k * f_val_mat
+        p_perm_k_weighted                   = p_perm_k * f_opt
         p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt                               = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
         order_seq                           = rng.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
             order_bio                       = rng.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence            = S_opt[s]
-                current_location            = np.array([0] * len(current_sequence))
-                current_location[current_sequence.astype(int)] = np.arange(len(current_sequence))
+                current_location            = np.argsort(current_sequence.astype(int))
 
                 selected_event              = i
 
@@ -279,19 +284,18 @@ class ZscoreSustain(AbstractSustain):
                 selected_biomarker          = self.stage_biomarker_index[0, selected_event]
                 possible_zscores_biomarker  = self.stage_zscore[self.stage_biomarker_index == selected_biomarker]
 
-                # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
                 min_filter                  = possible_zscores_biomarker < this_stage_zscore
                 max_filter                  = possible_zscores_biomarker > this_stage_zscore
-                events                      = np.array(range(N))
+                events                      = np.arange(N)
                 if np.any(min_filter):
                     min_zscore_bound        = max(possible_zscores_biomarker[min_filter])
-                    min_zscore_bound_event  = events[((self.stage_zscore[0] == min_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    min_zscore_bound_event  = events[np.logical_and(self.stage_zscore[0] == min_zscore_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                     move_event_to_lower_bound = current_location[min_zscore_bound_event] + 1
                 else:
                     move_event_to_lower_bound = 0
                 if np.any(max_filter):
                     max_zscore_bound        = min(possible_zscores_biomarker[max_filter])
-                    max_zscore_bound_event  = events[((self.stage_zscore[0] == max_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    max_zscore_bound_event  = events[np.logical_and(self.stage_zscore[0] == max_zscore_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                     move_event_to_upper_bound = current_location[max_zscore_bound_event]
                 else:
                     move_event_to_upper_bound = N
@@ -306,18 +310,29 @@ class ZscoreSustain(AbstractSustain):
                 for index in range(len(possible_positions)):
                     current_sequence        = S_opt[s]
 
-                    #choose a position in the sequence to move an event to
                     move_event_to           = possible_positions[index]
 
-                    # move this event in its new position
-                    current_sequence        = np.delete(current_sequence, move_event_from, 0)  # this is different to the Matlab version, which call current_sequence(move_event_from) = []
-                    new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                    # Move selected_event from move_event_from to move_event_to
+                    # without intermediate allocations from delete+concatenate
+                    new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                    if move_event_from < int(move_event_to):
+                        new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                        new_sequence[move_event_from:int(move_event_to)] = current_sequence[move_event_from+1:int(move_event_to)+1]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:] = current_sequence[int(move_event_to)+1:]
+                    elif move_event_from > int(move_event_to):
+                        new_sequence[:int(move_event_to)] = current_sequence[:int(move_event_to)]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:move_event_from+1] = current_sequence[int(move_event_to):move_event_from]
+                        new_sequence[move_event_from+1:] = current_sequence[move_event_from+1:]
+                    else:
+                        new_sequence[:] = current_sequence
                     possible_sequences[index, :] = new_sequence
 
                     possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
 
                     p_perm_k[:, :, s]       = possible_p_perm_k[:, :, index]
-                    total_prob_stage        = np.sum(p_perm_k * f_val_mat, 2)
+                    total_prob_stage        = np.sum(p_perm_k * f_opt, 2)
                     total_prob_subj         = np.sum(total_prob_stage, 1)
                     possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
@@ -331,17 +346,13 @@ class ZscoreSustain(AbstractSustain):
 
             S_opt[s]                        = this_S
 
-        p_perm_k_weighted                   = p_perm_k * f_val_mat
-        #adding 1e-250 fixes divide by zero problem that happens rarely
-        #p_perm_k_norm                       = p_perm_k_weighted / np.tile(np.sum(np.sum(p_perm_k_weighted, 1), 1).reshape(M, 1, 1), (1, N + 1, N_S))  # the second summation axis is different to Matlab version
+        p_perm_k_weighted                   = p_perm_k * f_opt
         p_perm_k_norm                       = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
 
-        f_opt                               = (np.squeeze(sum(sum(p_perm_k_norm))) / sum(sum(sum(p_perm_k_norm)))).reshape(N_S, 1, 1)
-        f_val_mat                           = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat                           = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt                               = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
 
         f_opt                               = f_opt.reshape(N_S)
-        total_prob_stage                    = np.sum(p_perm_k * f_val_mat, 2)
+        total_prob_stage                    = np.sum(p_perm_k * f_opt, 2)
         total_prob_subj                     = np.sum(total_prob_stage, 1)
 
         likelihood_opt                      = np.sum(np.log(total_prob_subj + 1e-250))
@@ -374,8 +385,7 @@ class ZscoreSustain(AbstractSustain):
                     move_event_from         = int(np.ceil(N * self.global_rng.random())) - 1
                     current_sequence        = samples_sequence[s, :, i - 1]
 
-                    current_location        = np.array([0] * N)
-                    current_location[current_sequence.astype(int)] = np.arange(N)
+                    current_location        = np.argsort(current_sequence.astype(int))
 
                     selected_event          = int(current_sequence[move_event_from])
                     this_stage_zscore       = self.stage_zscore[0, selected_event]
@@ -385,17 +395,17 @@ class ZscoreSustain(AbstractSustain):
                     # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
                     min_filter              = possible_zscores_biomarker < this_stage_zscore
                     max_filter              = possible_zscores_biomarker > this_stage_zscore
-                    events                  = np.array(range(N))
+                    events                  = np.arange(N)
                     if np.any(min_filter):
                         min_zscore_bound            = max(possible_zscores_biomarker[min_filter])
-                        min_zscore_bound_event      = events[((self.stage_zscore[0] == min_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                        min_zscore_bound_event      = events[np.logical_and(self.stage_zscore[0] == min_zscore_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                         move_event_to_lower_bound   = current_location[min_zscore_bound_event] + 1
                     else:
                         move_event_to_lower_bound   = 0
 
                     if np.any(max_filter):
                         max_zscore_bound            = min(possible_zscores_biomarker[max_filter])
-                        max_zscore_bound_event      = events[((self.stage_zscore[0] == max_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                        max_zscore_bound_event      = events[np.logical_and(self.stage_zscore[0] == max_zscore_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                         move_event_to_upper_bound   = current_location[max_zscore_bound_event]
                     else:
                         move_event_to_upper_bound   = N
@@ -420,8 +430,21 @@ class ZscoreSustain(AbstractSustain):
 
                     move_event_to           = possible_positions[index]
 
-                    current_sequence        = np.delete(current_sequence, move_event_from, 0)
-                    new_sequence            = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                    # Move selected_event from move_event_from to move_event_to
+                    # without intermediate allocations from delete+concatenate
+                    new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                    if move_event_from < int(move_event_to):
+                        new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                        new_sequence[move_event_from:int(move_event_to)] = current_sequence[move_event_from+1:int(move_event_to)+1]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:] = current_sequence[int(move_event_to)+1:]
+                    elif move_event_from > int(move_event_to):
+                        new_sequence[:int(move_event_to)] = current_sequence[:int(move_event_to)]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:move_event_from+1] = current_sequence[int(move_event_to):move_event_from]
+                        new_sequence[move_event_from+1:] = current_sequence[move_event_from+1:]
+                    else:
+                        new_sequence[:] = current_sequence
                     samples_sequence[s, :, i] = new_sequence
 
                 new_f                       = samples_f[:, i - 1] + f_sigma * self.global_rng.standard_normal()
@@ -434,15 +457,14 @@ class ZscoreSustain(AbstractSustain):
             samples_likelihood[i]           = likelihood_sample
 
             if i > 0:
-                ratio                           = np.exp(samples_likelihood[i] - samples_likelihood[i - 1])
-                if ratio < self.global_rng.random():
+                log_ratio                       = samples_likelihood[i] - samples_likelihood[i - 1]
+                if log_ratio < np.log(self.global_rng.random()):
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
 
-        perm_index                          = np.where(samples_likelihood == max(samples_likelihood))
-        perm_index                          = perm_index[0]
-        ml_likelihood                       = max(samples_likelihood)
+        perm_index                          = np.argmax(samples_likelihood)
+        ml_likelihood                       = np.max(samples_likelihood)
         ml_sequence                         = samples_sequence[:, :, perm_index]
         ml_f                                = samples_f[:, perm_index]
 

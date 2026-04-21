@@ -460,7 +460,7 @@ class MixedTypeSustain(AbstractSustain):
             zscored_data = np.array(sustainData.zdata[:, :, None], dtype=np.float64)
             x = zscored_data - stage_value_zscore
             x = np.transpose(x, (0, 2, 1))
-            p_perm_k_biomarkers[:, :, self.bool_zscore_biomarkers] = stats.norm.pdf(x)
+            p_perm_k_biomarkers[:, :, self.bool_zscore_biomarkers] = np.exp(-0.5 * x * x) / np.sqrt(2.0 * np.pi)
 
         if n_ordinal_event > 0:
             stage_value_ordinal_event = np.zeros((self.num_stages + 1, self.num_biomarkers))
@@ -498,28 +498,23 @@ class MixedTypeSustain(AbstractSustain):
         N = sustainData.getNumStages()
         
         S_opt = S_init.copy()
-        f_opt = np.array(f_init).reshape(N_S, 1, 1)
-        f_val_mat = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt = np.asarray(f_init).reshape(1, 1, N_S)
         p_perm_k = np.zeros((M, N + 1, N_S))
 
         for s in range(N_S):
             p_perm_k[:, :, s] = self._calculate_likelihood_stage(sustainData, S_opt[s])
 
-        p_perm_k_weighted = p_perm_k * f_val_mat
+        p_perm_k_weighted = p_perm_k * f_opt
         p_perm_k_norm = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
-        f_opt = (np.squeeze(np.sum(p_perm_k_norm, axis=(0, 1))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
+        f_opt = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
 
-        f_val_mat = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
         order_seq = rng.permutation(N_S)  # this will produce different random numbers to Matlab
 
         for s in order_seq:
             order_bio = rng.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
                 current_sequence = S_opt[s]
-                current_location = np.array([0] * len(current_sequence))
-                current_location[current_sequence.astype(int)] = np.arange(len(current_sequence))
+                current_location = np.argsort(current_sequence.astype(int))
 
                 selected_event = i
 
@@ -532,16 +527,16 @@ class MixedTypeSustain(AbstractSustain):
                 # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
                 min_filter = possible_zscores_biomarker < this_stage_zscore
                 max_filter = possible_zscores_biomarker > this_stage_zscore
-                events = np.array(range(self.num_stages))
+                events = np.arange(self.num_stages)
                 if np.any(min_filter):
                     min_zscore_bound = max(possible_zscores_biomarker[min_filter])
-                    min_zscore_bound_event = events[((self.stage_score[0] == min_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    min_zscore_bound_event = events[np.logical_and(self.stage_score[0] == min_zscore_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                     move_event_to_lower_bound = current_location[min_zscore_bound_event] + 1
                 else:
                     move_event_to_lower_bound = 0
                 if np.any(max_filter):
                     max_zscore_bound = min(possible_zscores_biomarker[max_filter])
-                    max_zscore_bound_event = events[((self.stage_score[0] == max_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                    max_zscore_bound_event = events[np.logical_and(self.stage_score[0] == max_zscore_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                     move_event_to_upper_bound = current_location[max_zscore_bound_event]
                 else:
                     move_event_to_upper_bound = N
@@ -563,14 +558,27 @@ class MixedTypeSustain(AbstractSustain):
                     move_event_to = possible_positions[index]
 
                     # move this event in its new position
-                    current_sequence = np.delete(current_sequence, move_event_from, 0)  # this is different to the Matlab version, which call current_sequence(move_event_from) = []
-                    new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                    # Move selected_event from move_event_from to move_event_to
+                    # without intermediate allocations from delete+concatenate
+                    new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                    if move_event_from < int(move_event_to):
+                        new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                        new_sequence[move_event_from:int(move_event_to)] = current_sequence[move_event_from+1:int(move_event_to)+1]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:] = current_sequence[int(move_event_to)+1:]
+                    elif move_event_from > int(move_event_to):
+                        new_sequence[:int(move_event_to)] = current_sequence[:int(move_event_to)]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:move_event_from+1] = current_sequence[int(move_event_to):move_event_from]
+                        new_sequence[move_event_from+1:] = current_sequence[move_event_from+1:]
+                    else:
+                        new_sequence[:] = current_sequence
                     possible_sequences[index, :] = new_sequence
 
                     possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
 
                     p_perm_k[:, :, s] = possible_p_perm_k[:, :, index]
-                    total_prob_stage = np.sum(p_perm_k * f_val_mat, 2)
+                    total_prob_stage = np.sum(p_perm_k * f_opt, 2)
                     total_prob_subj = np.sum(total_prob_stage, 1)
                     possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
 
@@ -584,15 +592,13 @@ class MixedTypeSustain(AbstractSustain):
 
             S_opt[s] = this_S
 
-        p_perm_k_weighted = p_perm_k * f_val_mat
+        p_perm_k_weighted = p_perm_k * f_opt
         p_perm_k_norm = p_perm_k_weighted / np.sum(p_perm_k_weighted + 1e-250, axis=(1, 2), keepdims=True)
 
-        f_opt = (np.squeeze(np.sum(p_perm_k_norm, axis=(0, 1))) / np.sum(p_perm_k_norm)).reshape(N_S, 1, 1)
-        f_val_mat = np.tile(f_opt, (1, N + 1, M))
-        f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
+        f_opt = (np.sum(p_perm_k_norm, axis=(0, 1)) / np.sum(p_perm_k_norm)).reshape(1, 1, N_S)
 
         f_opt = f_opt.reshape(N_S)
-        total_prob_stage = np.sum(p_perm_k * f_val_mat, 2)
+        total_prob_stage = np.sum(p_perm_k * f_opt, 2)
         total_prob_subj = np.sum(total_prob_stage, 1)
 
         likelihood_opt = np.sum(np.log(total_prob_subj + 1e-250))
@@ -622,8 +628,7 @@ class MixedTypeSustain(AbstractSustain):
                     move_event_from = int(np.ceil(N * self.global_rng.random())) - 1
                     current_sequence = samples_sequence[subtype_idx, :, iter_idx - 1]
 
-                    current_location = np.array([0] * N)
-                    current_location[current_sequence.astype(int)] = np.arange(N)
+                    current_location = np.argsort(current_sequence.astype(int))
 
                     selected_event = int(current_sequence[move_event_from])
                     this_stage_score = self.stage_score[0, selected_event]
@@ -633,18 +638,18 @@ class MixedTypeSustain(AbstractSustain):
                     # Keep each biomarker's events monotonic when proposing moves.
                     min_filter = possible_scores_biomarker < this_stage_score
                     max_filter = possible_scores_biomarker > this_stage_score
-                    events = np.array(range(N))
+                    events = np.arange(N)
 
                     if np.any(min_filter):
                         min_score_bound = max(possible_scores_biomarker[min_filter])
-                        min_score_bound_event = events[((self.stage_score[0] == min_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                        min_score_bound_event = events[np.logical_and(self.stage_score[0] == min_score_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                         move_event_to_lower_bound = current_location[min_score_bound_event] + 1
                     else:
                         move_event_to_lower_bound = 0
 
                     if np.any(max_filter):
                         max_score_bound = min(possible_scores_biomarker[max_filter])
-                        max_score_bound_event = events[((self.stage_score[0] == max_score_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                        max_score_bound_event = events[np.logical_and(self.stage_score[0] == max_score_bound, self.stage_biomarker_index[0] == selected_biomarker)]
                         move_event_to_upper_bound = current_location[max_score_bound_event]
                     else:
                         move_event_to_upper_bound = N
@@ -666,8 +671,21 @@ class MixedTypeSustain(AbstractSustain):
                     index = self.global_rng.choice(range(len(possible_positions)), 1, replace=True, p=weight)
                     move_event_to = possible_positions[index]
 
-                    current_sequence = np.delete(current_sequence, move_event_from, 0)
-                    new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
+                    # Move selected_event from move_event_from to move_event_to
+                    # without intermediate allocations from delete+concatenate
+                    new_sequence = np.empty(N, dtype=current_sequence.dtype)
+                    if move_event_from < int(move_event_to):
+                        new_sequence[:move_event_from] = current_sequence[:move_event_from]
+                        new_sequence[move_event_from:int(move_event_to)] = current_sequence[move_event_from+1:int(move_event_to)+1]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:] = current_sequence[int(move_event_to)+1:]
+                    elif move_event_from > int(move_event_to):
+                        new_sequence[:int(move_event_to)] = current_sequence[:int(move_event_to)]
+                        new_sequence[int(move_event_to)] = selected_event
+                        new_sequence[int(move_event_to)+1:move_event_from+1] = current_sequence[int(move_event_to):move_event_from]
+                        new_sequence[move_event_from+1:] = current_sequence[move_event_from+1:]
+                    else:
+                        new_sequence[:] = current_sequence
                     samples_sequence[subtype_idx, :, iter_idx] = new_sequence
 
                 new_f = samples_f[:, iter_idx - 1] + f_sigma * self.global_rng.standard_normal()
@@ -680,15 +698,14 @@ class MixedTypeSustain(AbstractSustain):
             samples_likelihood[iter_idx] = likelihood_sample
 
             if iter_idx > 0:
-                ratio = np.exp(samples_likelihood[iter_idx] - samples_likelihood[iter_idx - 1])
-                if ratio < self.global_rng.random():
+                log_ratio = samples_likelihood[iter_idx] - samples_likelihood[iter_idx - 1]
+                if log_ratio < np.log(self.global_rng.random()):
                     samples_likelihood[iter_idx] = samples_likelihood[iter_idx - 1]
                     samples_sequence[:, :, iter_idx] = samples_sequence[:, :, iter_idx - 1]
                     samples_f[:, iter_idx] = samples_f[:, iter_idx - 1]
 
-        perm_index = np.where(samples_likelihood == max(samples_likelihood))
-        perm_index = perm_index[0]
-        ml_likelihood = max(samples_likelihood)
+        perm_index = np.argmax(samples_likelihood)
+        ml_likelihood = np.max(samples_likelihood)
         ml_sequence = samples_sequence[:, :, perm_index]
         ml_f = samples_f[:, perm_index]
 
