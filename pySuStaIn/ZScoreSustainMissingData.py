@@ -202,41 +202,25 @@ class ZscoreSustainMissingData(AbstractSustain):
         M                                   = sustainData.getNumSamples()   #data_local.shape[0]
         p_perm_k                            = np.zeros((M, N + 1))
         
-        # Missing data
-        p_missingdata = np.ones((1,B))/ (self.max_biomarker_zscore-self.min_biomarker_zscore)
-        p_missingdata = np.tile(p_missingdata, (M, 1))
+        # Missing data - precompute invariant masks and constants
+        has_data                            = ~np.isnan(sustainData.data)  # (M, B)
+        log_p_missing                       = np.log(1.0 / (self.max_biomarker_zscore - self.min_biomarker_zscore))  # (B,)
 
         # optimised likelihood calc - take log and only call np.exp once after loop
-        sigmat                              = np.tile(self.std_biomarker_zscore, (M, 1))
+        sigmat                              = np.asarray(self.std_biomarker_zscore)  # (B,) - use broadcasting instead of tile
 
         factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
         coeff                               = np.log(1. / float(N + 1))
 
-        # original
-        """
-        for j in range(N+1):
-            x                   = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
-            p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
-        
-        # faster - do the tiling once
-        stage_value_tiled                   = np.tile(stage_value, (M, 1))
+        # Use broadcasting: data is (M, B), stage_value[:,j] is (B,)
         N_biomarkers                        = stage_value.shape[0]
         for j in range(N + 1):
-            stage_value_tiled_j             = stage_value_tiled[:, j].reshape(M, N_biomarkers)
-            x                               = (sustainData.data - stage_value_tiled_j) / sigmat  #(data_local - stage_value_tiled_j) / sigmat
-            p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(x), 1)
-        p_perm_k                            = np.exp(p_perm_k)
-        """
-        
-        # Missing data
-        stage_value_tiled                   = np.tile(stage_value, (M, 1))
-        N_biomarkers                        = stage_value.shape[0]
-        for j in range(N + 1):
-            stage_value_tiled_j             = stage_value_tiled[:, j].reshape(M, N_biomarkers)
-            x_hasdata                       = (sustainData.data - stage_value_tiled_j) / sigmat  #(data_local - stage_value_tiled_j) / sigmat
+            stage_value_j                   = stage_value[:, j]  # (B,)
+            x_hasdata                       = (sustainData.data - stage_value_j) / sigmat  # (M, B) with NaN
             
-            p = np.log(p_missingdata);
-            p[~np.isnan(sustainData.data)] = x_hasdata[~np.isnan(sustainData.data)];
+            # Where data is NaN, use log(p_missing); where present, use the residual
+            p                               = np.broadcast_to(log_p_missing, (M, N_biomarkers)).copy()
+            p[has_data]                     = x_hasdata[has_data]
 
             p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(p), 1) 
         p_perm_k                            = np.exp(p_perm_k)
