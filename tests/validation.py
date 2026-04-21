@@ -87,11 +87,12 @@ def save_time(sustain_class, end):
         time_file.touch()
         df = pd.DataFrame()
 
-    df = df.append({
+    row = pd.DataFrame([{
         "date": time.strftime("%Y-%m-%d", time.gmtime()),
         "method": sustain_class.__name__,
         "time": end
-    }, ignore_index=True)
+    }])
+    df = pd.concat([df, row], ignore_index=True)
     df.to_csv(time_file, index=False)
 
 
