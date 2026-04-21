@@ -183,15 +183,33 @@ class OrdinalSustain(AbstractSustain):
 
         M = sustainData.prob_score.shape[0]
         p_perm_k = np.zeros((M,N+1))
-        p_perm_k[:,0] = 1/(N+1)*np.prod(sustainData.prob_nl,1)
+        coeff = 1.0 / (N + 1)
+
+        # Use log-space running sum to avoid O(J*B) product per stage.
+        # When a biomarker reaches a new score level, we update its contribution:
+        # if it was still in the "normal" pool, remove log(prob_nl) and add log(prob_score);
+        # if it was already abnormal, swap to the new log(prob_score) value.
+        log_prob_nl = np.log(sustainData.prob_nl)
+        log_prob_score = np.log(sustainData.prob_score)
+        running_log_sum = np.sum(log_prob_nl, axis=1)  # (M,)
+        biomarker_active_score = np.full(B, -1, dtype=int)  # -1 = not yet reached
+
+        p_perm_k[:, 0] = coeff * np.exp(running_log_sum)
 
         for j in range(N):
             index_justreached = int(S[j])
-            biomarker_justreached = int(self.stage_biomarker_index[:,index_justreached])
+            biomarker_justreached = int(self.stage_biomarker_index[:, index_justreached])
             index_reached[biomarker_justreached] = index_justreached
+            if biomarker_active_score[biomarker_justreached] == -1:
+                # First event for this biomarker: remove log(prob_nl), add log(prob_score)
+                running_log_sum = running_log_sum - log_prob_nl[:, biomarker_justreached] + log_prob_score[:, index_justreached]
+            else:
+                # Subsequent event: swap to new log(prob_score)
+                running_log_sum = running_log_sum - log_prob_score[:, biomarker_active_score[biomarker_justreached]] + log_prob_score[:, index_justreached]
+            biomarker_active_score[biomarker_justreached] = index_justreached
             IS_normal[biomarker_justreached] = False
             IS_abnormal[biomarker_justreached] = True
-            p_perm_k[:,j+1] = 1/(N+1)*np.multiply(np.prod(sustainData.prob_score[:,index_reached[IS_abnormal]],1),np.prod(sustainData.prob_nl[:,IS_normal],1))
+            p_perm_k[:, j + 1] = coeff * np.exp(running_log_sum)
 
         return p_perm_k
 
