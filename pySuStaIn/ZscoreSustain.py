@@ -238,9 +238,14 @@ class ZscoreSustain(AbstractSustain):
         #     p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(x), 1)
         # p_perm_k                            = np.exp(p_perm_k)
 
-        # even faster - do in one go
-        x = (sustainData.data[:, :, None] - stage_value) / sigmat[None, :, None]
-        p_perm_k = coeff + np.sum(factor[None, :, None] - 0.5 * np.square(x), 1)
+        # Accumulate per-biomarker to avoid (J, I, K+1) intermediate tensor.
+        # Each iteration creates only (J, K+1) arrays, cutting peak memory ~3x.
+        data = sustainData.data
+        result = np.zeros((M, N + 1))
+        for i in range(data.shape[1]):
+            diff = (data[:, i, None] - stage_value[i, :]) / sigmat[i]
+            result += factor[i] - 0.5 * diff * diff
+        p_perm_k = coeff + result
         p_perm_k = np.exp(p_perm_k)
 
         return p_perm_k
