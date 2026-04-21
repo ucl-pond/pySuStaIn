@@ -110,6 +110,11 @@ class ZscoreSustain(AbstractSustain):
         self.biomarker_labels           = biomarker_labels
 
         numStages                       = stage_zscore.shape[1]
+
+        # Cache invariant constants for _calculate_likelihood_stage
+        N_events = numStages
+        self._log_factor = np.log(1. / np.sqrt(np.pi * 2.0) * self.std_biomarker_zscore)
+        self._log_coeff = np.log(1. / float(N_events + 1))
         self.__sustainData              = ZScoreSustainData(data, numStages)
 
         super().__init__(self.__sustainData,
@@ -215,8 +220,8 @@ class ZscoreSustain(AbstractSustain):
         # optimised likelihood calc - take log and only call np.exp once after loop
         sigmat = self.std_biomarker_zscore
 
-        factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
-        coeff                               = np.log(1. / float(N + 1))
+        factor                              = self._log_factor
+        coeff                               = self._log_coeff
 
         # original
         """
