@@ -367,6 +367,13 @@ class ZscoreSustain(AbstractSustain):
         # Reduce frequency of tqdm update to 0.1% of total for larger iteration numbers
         tqdm_update_iters = int(n_iterations/1000) if n_iterations > 100000 else None 
 
+        # Most proposals leave the sequence of a subtype unchanged, so keep the
+        # stage likelihoods of the current and proposed sequence of each subtype.
+        # The likelihood only needs their sum over stages, so keep only that
+        M                                   = sustainData.getNumSamples()
+        p_perm_k_cache                      = [{} for s in range(N_S)]
+        p_perm_k_stage_sum                  = np.zeros((M, N_S))
+
         for i in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if i > 0:
                 seq_order                   = self.global_rng.permutation(N_S)  # this function returns different random numbers to Matlab
@@ -430,7 +437,15 @@ class ZscoreSustain(AbstractSustain):
 
             S                               = samples_sequence[:, :, i]
             f                               = samples_f[:, i]
-            likelihood_sample, _, _, _, _   = self._calculate_likelihood(sustainData, S, f)
+            # same as self._calculate_likelihood(sustainData, S, f) up to roundoff,
+            # but reuses the stage sums of sequences that are in the cache
+            for s in range(N_S):
+                key                         = S[s].tobytes()
+                if key not in p_perm_k_cache[s]:
+                    p_perm_k_cache[s][key]  = np.sum(self._calculate_likelihood_stage(sustainData, S[s]), 1)
+                p_perm_k_stage_sum[:, s]    = p_perm_k_cache[s][key]
+            total_prob_subj                 = p_perm_k_stage_sum @ f
+            likelihood_sample               = np.sum(np.log(total_prob_subj + 1e-250))
             samples_likelihood[i]           = likelihood_sample
 
             if i > 0:
@@ -439,6 +454,11 @@ class ZscoreSustain(AbstractSustain):
                     samples_likelihood[i]       = samples_likelihood[i - 1]
                     samples_sequence[:, :, i]   = samples_sequence[:, :, i - 1]
                     samples_f[:, i]             = samples_f[:, i - 1]
+
+            # keep only the stage likelihoods of the accepted sequences
+            for s in range(N_S):
+                key                         = samples_sequence[s, :, i].tobytes()
+                p_perm_k_cache[s]           = {key: p_perm_k_cache[s][key]}
 
         perm_index                          = np.where(samples_likelihood == max(samples_likelihood))
         perm_index                          = perm_index[0]
