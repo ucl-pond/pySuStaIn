@@ -33,9 +33,15 @@ from functools import partial, partialmethod
 
 import time
 import pathos
+from threadpoolctl import threadpool_limits
 
 #*******************************************
 #The data structure class for AbstractSustain. It has no data itself - the implementations of AbstractSustain need to define their own implementations of this class.
+def _call_with_one_blas_thread(func, *args):
+    with threadpool_limits(limits=1):
+        return func(*args)
+
+
 class AbstractSustainData(ABC):
 
     @abstractmethod
@@ -69,7 +75,8 @@ class AbstractSustain(ABC):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed=None):
+                 seed=None,
+                 n_jobs=None):
         # The initializer for the abstract class
         # Parameters:
         #   sustainData                 - an instance of an AbstractSustainData implementation
@@ -80,6 +87,7 @@ class AbstractSustain(ABC):
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
         #   seed                        - random number seed
+        #   n_jobs                      - number of processes for parallel startpoints. Default: the number of CPUs this process may use
 
         assert(isinstance(sustainData, AbstractSustainData))
 
@@ -89,7 +97,16 @@ class AbstractSustain(ABC):
         self.N_S_max                    = N_S_max
         self.N_iterations_MCMC          = N_iterations_MCMC
 
-        self.num_cores                  = multiprocessing.cpu_count()
+        # Respect CPU affinity (taskset, cgroups, SLURM) where the OS reports it,
+        # as multiprocessing.cpu_count() returns all CPUs of the machine
+        if n_jobs is None:
+            try:
+                n_jobs                  = len(os.sched_getaffinity(0))
+            except AttributeError:
+                n_jobs                  = multiprocessing.cpu_count()
+        elif isinstance(n_jobs, bool) or not isinstance(n_jobs, (int, np.integer)) or n_jobs < 1:
+            raise ValueError(f"n_jobs must be a positive integer or None, not {n_jobs!r}")
+        self.num_cores                  = n_jobs
 
         self.output_folder              = output_folder
         self.dataset_name               = dataset_name
@@ -111,8 +128,7 @@ class AbstractSustain(ABC):
             np_version                  = float(np.__version__.split('.')[0] + '.' + np.__version__.split('.')[1])
             assert np_version >= 1.18, "numpy version must be >= 1.18 for parallelization to work properly."
 
-            self.pool                   = pathos.multiprocessing.ProcessingPool() #pathos.multiprocessing.ParallelPool()
-            self.pool.ncpus             = multiprocessing.cpu_count()
+            self.pool                   = pathos.multiprocessing.ProcessingPool(nodes=self.num_cores) #pathos.multiprocessing.ParallelPool()
         else:
             self.pool                   = pathos.serial.SerialPool()
 
@@ -709,7 +725,7 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_iteration, sustainData)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        pool_output_list                    = self._map_startpoints(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -729,6 +745,13 @@ class AbstractSustain(ABC):
         ml_likelihood                       = ml_likelihood_mat[ix]
 
         return ml_sequence, ml_f, ml_likelihood, ml_sequence_mat, ml_f_mat, ml_likelihood_mat
+
+    def _map_startpoints(self, func, iterable):
+        # Map func over the startpoints. Each parallel worker uses one BLAS
+        # thread, so that the workers together do not use more threads than CPUs
+        if self.use_parallel_startpoints:
+            func                            = partial(_call_with_one_blas_thread, func)
+        return self.pool.map(func, iterable)
 
     def _find_ml_iteration(self, sustainData, seed_seq):
         #Convenience sub-function for above
@@ -764,7 +787,7 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_split_iteration, sustainData)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        pool_output_list                    = self._map_startpoints(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)
@@ -838,7 +861,7 @@ class AbstractSustain(ABC):
 
         partial_iter                        = partial(self._find_ml_mixture_iteration, sustainData, seq_init, f_init)
         seed_sequences = np.random.SeedSequence(self.global_rng.integers(1e10))
-        pool_output_list                    = self.pool.map(partial_iter, seed_sequences.spawn(self.N_startpoints))
+        pool_output_list                    = self._map_startpoints(partial_iter, seed_sequences.spawn(self.N_startpoints))
 
         if ~isinstance(pool_output_list, list):
             pool_output_list                = list(pool_output_list)

@@ -46,6 +46,18 @@ class OrdinalSustainData(AbstractSustainData):
     def reindex(self, index):
         return OrdinalSustainData(self.prob_nl[index,], self.prob_score[index,], self.__numStages)
 
+    def get_augmented_data(self):
+        # Cached [log prob_nl, log prob_score, 1], used to compute the stage
+        # log-likelihoods of all subjects as one matrix product. log(0) is replaced
+        # by a large negative number, so that it can be multiplied by 0 in the
+        # product; exp of any sum that includes it is 0
+        if getattr(self, '_augmented_data', None) is None:
+            with np.errstate(divide='ignore'):
+                log_prob = np.log(np.hstack([self.prob_nl, self.prob_score]).astype(np.float64))
+            log_prob[np.isneginf(log_prob)] = -1e300
+            self._augmented_data = np.hstack([log_prob, np.ones((log_prob.shape[0], 1))])
+        return self._augmented_data
+
 #*******************************************
 #An implementation of the AbstractSustain class with multiple events for each biomarker based on deviations from normality, measured in z-scores.
 #There are a fixed number of thresholds for each biomarker, specified at initialization of the OrdinalSustain object.
@@ -62,7 +74,8 @@ class OrdinalSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed=None):
+                 seed=None,
+                 n_jobs=None):
         # The initializer for the scored events model implementation of AbstractSustain
         # Parameters:
         #   prob_nl                     - probability of negative/normal class for all subjects across all biomarkers 
@@ -79,6 +92,7 @@ class OrdinalSustain(AbstractSustain):
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
         #   seed                        - random number seed
+        #   n_jobs                      - number of processes for parallel startpoints. Default: the number of CPUs this process may use
 
         N                               = prob_nl.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -122,7 +136,8 @@ class OrdinalSustain(AbstractSustain):
                          output_folder,
                          dataset_name,
                          use_parallel_startpoints,
-                         seed)
+                         seed,
+                         n_jobs)
 
 
     def _initialise_sequence(self, sustainData, rng):
@@ -177,23 +192,22 @@ class OrdinalSustain(AbstractSustain):
 
         B = sustainData.prob_nl.shape[1]
     
-        IS_normal = np.ones(B)
-        IS_abnormal = np.zeros(B)
-        index_reached = np.zeros(B,dtype=int)
-
-        M = sustainData.prob_score.shape[0]
-        p_perm_k = np.zeros((M,N+1))
-        p_perm_k[:,0] = 1/(N+1)*np.prod(sustainData.prob_nl,1)
-
+        # Compute log p_perm_k as one matrix product of [log prob_nl, log prob_score, 1]
+        # with a 0/1 matrix that selects, at each stage, log prob_nl for each
+        # biomarker that has not reached an event yet, and otherwise log prob_score
+        # of the last event it reached; the last row adds the log stage prior
+        selector = np.zeros((B + N + 1, N + 1))
+        selected_row = np.arange(B)
+        selector[selected_row, 0] = 1
         for j in range(N):
             index_justreached = int(S[j])
-            biomarker_justreached = int(self.stage_biomarker_index[:,index_justreached])
-            index_reached[biomarker_justreached] = index_justreached
-            IS_normal[biomarker_justreached] = 0
-            IS_abnormal[biomarker_justreached] = 1
-            bool_IS_normal = IS_normal.astype(bool)
-            bool_IS_abnormal = IS_abnormal.astype(bool)
-            p_perm_k[:,j+1] = 1/(N+1)*np.multiply(np.prod(sustainData.prob_score[:,index_reached[bool_IS_abnormal]],1),np.prod(sustainData.prob_nl[:,bool_IS_normal],1))
+            biomarker_justreached = int(self.stage_biomarker_index[0, index_justreached])
+            selected_row[biomarker_justreached] = B + index_justreached
+            selector[selected_row, j + 1] = 1
+        selector[B + N, :] = np.log(1 / (N + 1))
+
+        p_perm_k = sustainData.get_augmented_data() @ selector
+        np.exp(p_perm_k, out=p_perm_k)
 
         return p_perm_k
 
