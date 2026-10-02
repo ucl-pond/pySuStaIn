@@ -540,28 +540,61 @@ class AbstractSustain(ABC):
         prob_subtype                        = np.zeros((nSamples, N_S))
         prob_stage                          = np.zeros((nSamples, nStages + 1))
 
-        for i in range(N_samples):
-            sample                          = int(select_samples[i])
+        # Sum the normalised probabilities over the samples, and divide by the
+        # number of samples at the end. Consecutive MCMC samples often have the same
+        # sequences, and the stage likelihoods depend only on the sequences (not on
+        # f). So keep the stage likelihoods of recent sequences of each subtype (at
+        # most about 512 MB in total, including the keys; the oldest entries are
+        # removed first, and nothing is cached if one entry does not fit), and add
+        # the contribution to prob_subtype_stage once for each run of samples with
+        # the same sequences
+        p_perm_k_cache                      = [{} for s in range(N_S)]
+        cache_entry_bytes                   = 8 * nSamples * (nStages + 1) + samples_sequence.shape[1] * samples_sequence.itemsize
+        cache_max_entries                   = int(512e6 / (cache_entry_bytes * N_S))
+        p_perm_k                            = np.zeros((nSamples, nStages + 1, N_S))
+        p_perm_k_stage_sum                  = np.zeros((nSamples, N_S))
+        current_keys                        = None
+        run_length                          = 0
 
-            this_S                          = samples_sequence[ix, :, sample]
-            this_f                          = samples_f[ix, sample]
+        for i in range(N_samples + 1):
+            if i < N_samples:
+                sample                      = int(select_samples[i])
+                this_S                      = samples_sequence[ix, :, sample]
+                this_f                      = samples_f[ix, sample]
+                keys                        = [this_S[s].tobytes() for s in range(N_S)]
+            else:
+                keys                        = None
 
-            _,                  \
-            _,                  \
-            total_prob_stage,   \
-            total_prob_subtype, \
-            total_prob_subtype_stage        = self._calculate_likelihood(sustainData, this_S, this_f)
+            if keys != current_keys:
+                # end of a run of samples with the same sequences
+                if run_length > 0:
+                    prob_subtype_stage      += run_length * (p_perm_k / np.sum(p_perm_k, axis=(1, 2), keepdims=True))
+                if keys is None:
+                    break
+                for s in range(N_S):
+                    if keys[s] in p_perm_k_cache[s]:
+                        p_perm_k[:, :, s]   = p_perm_k_cache[s][keys[s]]
+                        continue
+                    p_perm_k[:, :, s]       = self._calculate_likelihood_stage(sustainData, this_S[s])
+                    if cache_max_entries > 0:
+                        if len(p_perm_k_cache[s]) >= cache_max_entries:
+                            del p_perm_k_cache[s][next(iter(p_perm_k_cache[s]))]
+                        p_perm_k_cache[s][keys[s]] = p_perm_k[:, :, s].copy()
+                p_perm_k_stage_sum          = np.sum(p_perm_k, 1)
+                current_keys                = keys
+                run_length                  = 0
+            run_length                      += 1
 
-            total_prob_subtype              = total_prob_subtype.reshape(len(total_prob_subtype), N_S)
-            total_prob_subtype_norm         = total_prob_subtype        / np.tile(np.sum(total_prob_subtype, 1).reshape(len(total_prob_subtype), 1),        (1, N_S))
-            total_prob_stage_norm           = total_prob_stage          / np.tile(np.sum(total_prob_stage, 1).reshape(len(total_prob_stage), 1),          (1, nStages + 1)) #removed total_prob_subtype
+            # same as in self._calculate_likelihood(sustainData, this_S, this_f)
+            total_prob_stage                = p_perm_k @ this_f
+            total_prob_subtype              = p_perm_k_stage_sum * this_f
 
-            #total_prob_subtype_stage_norm   = total_prob_subtype_stage  / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1), 1).reshape(nSamples, 1, 1),   (1, nStages + 1, N_S))
-            total_prob_subtype_stage_norm   = total_prob_subtype_stage / np.tile(np.sum(np.sum(total_prob_subtype_stage, 1, keepdims=True), 2).reshape(nSamples, 1, 1),(1, nStages + 1, N_S))
+            prob_subtype                    += total_prob_subtype / np.sum(total_prob_subtype, 1, keepdims=True)
+            prob_stage                      += total_prob_stage / np.sum(total_prob_stage, 1, keepdims=True)
 
-            prob_subtype_stage              = (i / (i + 1.) * prob_subtype_stage)   + (1. / (i + 1.) * total_prob_subtype_stage_norm)
-            prob_subtype                    = (i / (i + 1.) * prob_subtype)         + (1. / (i + 1.) * total_prob_subtype_norm)
-            prob_stage                      = (i / (i + 1.) * prob_stage)           + (1. / (i + 1.) * total_prob_stage_norm)
+        prob_subtype                        /= N_samples
+        prob_stage                          /= N_samples
+        prob_subtype_stage                  /= N_samples
 
         ml_subtype                          = np.nan * np.ones((nSamples, 1))
         prob_ml_subtype                     = np.nan * np.ones((nSamples, 1))
