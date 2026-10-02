@@ -83,6 +83,43 @@ class MixedTypeSustainData(AbstractSustainData):
         prob_nl = self.prob_nl[index,] if self.prob_nl is not None else None
         prob_score = self.prob_score[index,] if self.prob_score is not None else None
         return MixedTypeSustainData(zdata, prob_nl, prob_score, self.__numStages)
+
+    def get_augmented_data(self, bool_zscore_biomarkers, stage_biomarker_index, stage_score):
+        """
+        Cached per-subject columns used to compute the stage log-likelihoods of all
+        subjects as one matrix product:
+        [x, -0.5 |x|^2, log prob_nl, log prob_score of each event, 1],
+        where x is zdata, and the event columns hold, for each ordinal/event
+        biomarker event, the log probability of its score. Columns that do not
+        exist (no z-score or no ordinal/event biomarkers) are left out.
+        """
+        key = (bool_zscore_biomarkers.tobytes(), stage_biomarker_index.tobytes(), stage_score.tobytes())
+        if getattr(self, '_augmented_key', None) != key:
+            M = self.getNumSamples()
+            columns = []
+            if self.zdata is not None:
+                x = np.asarray(self.zdata, dtype=np.float64)
+                columns += [x, -0.5 * np.sum(x * x, 1, keepdims=True)]
+            if self.prob_nl is not None:
+                # column of each ordinal/event biomarker in prob_nl and prob_score
+                ordinal_event_index = np.cumsum(~bool_zscore_biomarkers) - 1
+                events = np.flatnonzero(~bool_zscore_biomarkers[stage_biomarker_index])
+                log_prob_event = np.zeros((M, len(stage_biomarker_index)))
+                log_prob_event[:, events] = self._finite_log(self.prob_score[:, ordinal_event_index[stage_biomarker_index[events]], stage_score[events] - 1])
+                columns += [self._finite_log(self.prob_nl), log_prob_event]
+            columns.append(np.ones((M, 1)))
+            self._augmented_data = np.hstack(columns)
+            self._augmented_key = key
+        return self._augmented_data
+
+    @staticmethod
+    def _finite_log(p):
+        # log, with log(0) replaced by a large negative number, so that it can be
+        # multiplied by 0 in a matrix product; exp of any sum that includes it is 0
+        with np.errstate(divide='ignore'):
+            log_p = np.log(np.asarray(p, dtype=np.float64))
+        log_p[np.isneginf(log_p)] = -1e300
+        return log_p
         
 class MixedTypeSustain(AbstractSustain):
     """
@@ -163,7 +200,7 @@ class MixedTypeSustain(AbstractSustain):
             ordinal_prob_nl, ordinal_prob_score, ordinal_score_vals, ordinal_biomarker_labels, # ordinal parameters
             event_prob_yes, event_prob_no, event_biomarker_labels, # event parameters
             N_startpoints, N_S_max, N_iterations_MCMC,
-            output_folder, dataset_name, use_parallel_startpoints, seed=None
+            output_folder, dataset_name, use_parallel_startpoints, seed=None, n_jobs=None
             ):
         """
         The initializer for the mixed (z-score + ordinal + event) implementation of AbstractSustain.
@@ -217,6 +254,9 @@ class MixedTypeSustain(AbstractSustain):
             Whether to parallelize the maximum likelihood loop.
         seed : int or None
             Random number seed.
+        n_jobs : int or None
+            Number of processes for parallel startpoints. Default: the number of
+            CPUs this process may use.
         """
         # ----- z-score inputs
         if zscore_data is not None and not np.all(zscore_data == 0):
@@ -347,7 +387,7 @@ class MixedTypeSustain(AbstractSustain):
         self.__sustainData = MixedTypeSustainData(zscore_data, combined_prob_nl, combined_prob_score, self.num_stages)
 
         # initialise abstract sustain
-        super().__init__(self.__sustainData, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, use_parallel_startpoints, seed)
+        super().__init__(self.__sustainData, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, use_parallel_startpoints, seed, n_jobs)
 
         print("Init done for MixedTypeSustain")
 
@@ -401,11 +441,10 @@ class MixedTypeSustain(AbstractSustain):
         """
         Compute p(data | stage, subtype-sequence S) for one subtype sequence.
 
-        p_perm_k is computed by factorizing across biomarkers: first build a per-biomarker
-        likelihood tensor p_perm_k_biomarkers with shape (n_subjects, n_stages + 1, n_biomarkers),
-        using Gaussian likelihoods for z-score biomarkers and prob_nl/prob_score for
-        ordinal/event biomarkers, then multiply across biomarkers (np.prod(..., axis=2))
-        and apply a uniform stage prior.
+        p_perm_k is computed by factorizing across biomarkers: the log-likelihood is the
+        sum over biomarkers of the Gaussian log-likelihoods for z-score biomarkers and
+        the log of prob_nl/prob_score for ordinal/event biomarkers, plus a uniform stage
+        prior. All subjects and stages are computed as one matrix product.
 
         Output
         ------
@@ -413,19 +452,9 @@ class MixedTypeSustain(AbstractSustain):
             Stage likelihoods for each subject.
             Shape: (n_subjects, n_stages + 1).
         """
-        M = sustainData.getNumSamples()
         N = sustainData.getNumStages()
         ordinal_event_mask = ~self.bool_zscore_biomarkers
         n_ordinal_event = int(np.sum(ordinal_event_mask))
-
-        if sustainData.prob_nl is not None:
-            prob_nl = sustainData.prob_nl.copy()
-            prob_score = sustainData.prob_score.copy()
-        else:
-            prob_nl = np.empty((M, n_ordinal_event))
-            prob_score = np.empty((M, n_ordinal_event, 0))
-
-        p_perm_k_biomarkers = np.zeros((M, N + 1, self.num_biomarkers))
 
         S = np.asarray(S).reshape(-1)
 
@@ -456,38 +485,36 @@ class MixedTypeSustain(AbstractSustain):
                 idx_zscore += 1
 
         stage_value_zscore = (0.5 * point_value[:, :point_value.shape[1] - 1] + 0.5 * point_value[:, 1:])[self.bool_zscore_biomarkers]
+
+        # Compute log p_perm_k = sum over biomarkers of the log-likelihoods as one
+        # matrix product of cached per-subject columns (see get_augmented_data)
+        # with a (columns x stages) matrix:
+        # - z-score biomarkers: log N(x; v, 1) = x.v - 0.5 |x|^2 - 0.5 |v|^2 - 0.5 log(2 pi)
+        # - ordinal/event biomarkers: a 0/1 matrix that selects, at each stage, log
+        #   prob_nl for biomarkers with no event reached yet, and otherwise the log
+        #   probability of the score of the last event reached
+        stage_biomarker_index = self.stage_biomarker_index[0].astype(int)
+        rows = []
+        log_prob_const = np.full(N + 1, np.log(1. / float(N + 1)))
         if sustainData.zdata is not None:
-            zscored_data = np.array(sustainData.zdata[:, :, None], dtype=np.float64)
-            x = zscored_data - stage_value_zscore
-            x = np.transpose(x, (0, 2, 1))
-            p_perm_k_biomarkers[:, :, self.bool_zscore_biomarkers] = stats.norm.pdf(x)
-
+            rows += [stage_value_zscore, np.ones((1, N + 1))]
+            log_prob_const += -0.5 * np.sum(stage_value_zscore * stage_value_zscore, 0) - 0.5 * stage_value_zscore.shape[0] * np.log(2 * np.pi)
         if n_ordinal_event > 0:
-            stage_value_ordinal_event = np.zeros((self.num_stages + 1, self.num_biomarkers))
-            for stage in range(self.num_stages):
-                index_justreached = int(S[stage])
-                biomarker_justreached = int(self.stage_biomarker_index[0][index_justreached])
-                stage_value_justreached = int(self.stage_score[0][index_justreached])
-                if not self.bool_zscore_biomarkers[biomarker_justreached]:
-                    index = stage + 1
-                    stage_value_ordinal_event[index:, biomarker_justreached] = stage_value_justreached
-            stage_value_ordinal_event = stage_value_ordinal_event[:, ordinal_event_mask]
-            p_perm_k_biomarkers[:, 0, ordinal_event_mask] = prob_nl
-
+            ordinal_event_index = np.cumsum(ordinal_event_mask) - 1
+            selector = np.zeros((n_ordinal_event + N, N + 1))
+            selected_row = np.arange(n_ordinal_event)
+            selector[selected_row, 0] = 1
             for stage in range(N):
-                probability_stage = prob_nl.copy()
-                stage_value_justreached = stage_value_ordinal_event[stage + 1]
+                event = int(S[stage])
+                biomarker = stage_biomarker_index[event]
+                if ordinal_event_mask[biomarker]:
+                    selected_row[ordinal_event_index[biomarker]] = n_ordinal_event + event
+                selector[selected_row, stage + 1] = 1
+            rows.append(selector)
+        rows.append(log_prob_const[None, :])
 
-                for i, value in enumerate(stage_value_justreached):
-                    if value > 0:
-                        idx_value = int(value) - 1
-                        probability_stage[:, i] = prob_score[:, i, idx_value]
-
-                p_perm_k_biomarkers[:, stage + 1, ordinal_event_mask] = probability_stage
-
-        coeff = 1. / float(N + 1)
-        p_perm_k = np.prod(p_perm_k_biomarkers, 2)
-        p_perm_k = coeff * p_perm_k
+        p_perm_k = sustainData.get_augmented_data(self.bool_zscore_biomarkers, stage_biomarker_index, self.stage_score[0].astype(int)) @ np.vstack(rows)
+        np.exp(p_perm_k, out=p_perm_k)
 
         return p_perm_k
 
