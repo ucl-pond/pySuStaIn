@@ -152,8 +152,23 @@ class AbstractSustain(ABC):
                 ml_f_EM                     = loaded_variables["ml_f_EM"]
                 ml_f_prev_EM                = loaded_variables["ml_f_prev_EM"]
 
+                # The pickle also stores the subtype and stage of each subject, so
+                # there is no need to compute them again
+                staging_keys                = ["ml_subtype", "prob_ml_subtype", "ml_stage", "prob_ml_stage",
+                                               "prob_subtype", "prob_stage", "prob_subtype_stage"]
+                staging_loaded              = all(key in loaded_variables for key in staging_keys)
+                if staging_loaded:
+                    ml_subtype,             \
+                    prob_ml_subtype,        \
+                    ml_stage,               \
+                    prob_ml_stage,          \
+                    prob_subtype,           \
+                    prob_stage,             \
+                    prob_subtype_stage      = [loaded_variables[key] for key in staging_keys]
+
                 pickle_file.close()
             else:
+                staging_loaded              = False
                 print("Failed to find pickle file: " + pickle_filename_s + ". Running SuStaIn model for " + str(s) + " subtype.")
 
                 ml_sequence_EM,     \
@@ -176,14 +191,15 @@ class AbstractSustain(ABC):
                 ml_f_prev_EM                = ml_f_EM
 
             # max like subtype and stage / subject
-            N_samples                       = 1000
-            ml_subtype,             \
-            prob_ml_subtype,        \
-            ml_stage,               \
-            prob_ml_stage,          \
-            prob_subtype,           \
-            prob_stage,             \
-            prob_subtype_stage               = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence, samples_f, N_samples)   #self.subtype_and_stage_individuals(self.__data, samples_sequence, samples_f, N_samples)
+            if not staging_loaded:
+                N_samples                   = 1000
+                ml_subtype,             \
+                prob_ml_subtype,        \
+                ml_stage,               \
+                prob_ml_stage,          \
+                prob_subtype,           \
+                prob_stage,             \
+                prob_subtype_stage          = self.subtype_and_stage_individuals(self.__sustainData, samples_sequence, samples_f, N_samples)   #self.subtype_and_stage_individuals(self.__data, samples_sequence, samples_f, N_samples)
             if not pickle_filepath.exists():
 
                 if not os.path.exists(self.output_folder):
