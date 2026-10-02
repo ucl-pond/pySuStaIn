@@ -615,6 +615,13 @@ class MixedTypeSustain(AbstractSustain):
 
         tqdm_update_iters = int(n_iterations / 1000) if n_iterations > 100000 else None
 
+        # Most proposals leave the sequence of a subtype unchanged, so keep the
+        # stage likelihoods of the current and proposed sequence of each subtype.
+        # The likelihood only needs their sum over stages, so keep only that
+        M = sustainData.getNumSamples()
+        p_perm_k_cache = [{} for s in range(N_S)]
+        p_perm_k_stage_sum = np.zeros((M, N_S))
+
         for iter_idx in tqdm(range(n_iterations), "MCMC Iteration", n_iterations, miniters=tqdm_update_iters):
             if iter_idx > 0:
                 subtype_order = self.global_rng.permutation(N_S)
@@ -676,7 +683,15 @@ class MixedTypeSustain(AbstractSustain):
 
             S = samples_sequence[:, :, iter_idx]
             f = samples_f[:, iter_idx]
-            likelihood_sample, _, _, _, _ = self._calculate_likelihood(sustainData, S, f)
+            # same as self._calculate_likelihood(sustainData, S, f) up to roundoff,
+            # but reuses the stage sums of sequences that are in the cache
+            for s in range(N_S):
+                key = S[s].tobytes()
+                if key not in p_perm_k_cache[s]:
+                    p_perm_k_cache[s][key] = np.sum(self._calculate_likelihood_stage(sustainData, S[s]), 1)
+                p_perm_k_stage_sum[:, s] = p_perm_k_cache[s][key]
+            total_prob_subj = p_perm_k_stage_sum @ f
+            likelihood_sample = np.sum(np.log(total_prob_subj + 1e-250))
             samples_likelihood[iter_idx] = likelihood_sample
 
             if iter_idx > 0:
@@ -685,6 +700,11 @@ class MixedTypeSustain(AbstractSustain):
                     samples_likelihood[iter_idx] = samples_likelihood[iter_idx - 1]
                     samples_sequence[:, :, iter_idx] = samples_sequence[:, :, iter_idx - 1]
                     samples_f[:, iter_idx] = samples_f[:, iter_idx - 1]
+
+            # keep only the stage sums of the accepted sequences
+            for s in range(N_S):
+                key = samples_sequence[s, :, iter_idx].tobytes()
+                p_perm_k_cache[s] = {key: p_perm_k_cache[s][key]}
 
         perm_index = np.where(samples_likelihood == max(samples_likelihood))
         perm_index = perm_index[0]
