@@ -235,10 +235,13 @@ class ZscoreSustainMissingData(AbstractSustain):
             stage_value_tiled_j             = stage_value_tiled[:, j].reshape(M, N_biomarkers)
             x_hasdata                       = (sustainData.data - stage_value_tiled_j) / sigmat  #(data_local - stage_value_tiled_j) / sigmat
             
-            p = np.log(p_missingdata);
-            p[~np.isnan(sustainData.data)] = x_hasdata[~np.isnan(sustainData.data)];
+            # a missing value has the uniform density p_missingdata over the z-score
+            # range, so its log-likelihood is log(p_missingdata); an observed value
+            # has the Gaussian log-likelihood
+            p = np.log(p_missingdata)
+            p[~np.isnan(sustainData.data)] = (factor - .5 * np.square(x_hasdata))[~np.isnan(sustainData.data)]
 
-            p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(p), 1) 
+            p_perm_k[:, j]                  = coeff + np.sum(p, 1)
         p_perm_k                            = np.exp(p_perm_k)
 
         return p_perm_k
