@@ -1,4 +1,5 @@
 from pathlib import Path
+import pickle
 import shutil
 
 import numpy as np
@@ -37,6 +38,27 @@ def initialize_validation(seed):
     return validation_params
 
 
+def summarise_likelihoods(output_folder, dataset_name, n_subtypes_max):
+    '''
+    Summarise the MCMC samples_likelihood saved in the pickle file for
+    each number of subtypes. This is compared in addition to the
+    per-subject results, as it is sensitive to changes in the likelihood
+    and in the MCMC samples.
+    '''
+    rows = []
+    for s in range(n_subtypes_max):
+        pickle_path = Path(output_folder) / "pickle_files" / f"{dataset_name}_subtype{s}.pickle"
+        with open(pickle_path, "rb") as f:
+            samples_likelihood = np.asarray(pickle.load(f)["samples_likelihood"]).ravel()
+        rows.append({
+            "n_subtypes": s + 1,
+            "max_likelihood": samples_likelihood.max(),
+            "mean_likelihood": samples_likelihood.mean(),
+            "last_likelihood": samples_likelihood[-1],
+        })
+    return pd.DataFrame(rows)
+
+
 def create_new_validation(seed, sustain_classes):
     validation_params = initialize_validation(seed)
     # Extract params
@@ -73,6 +95,11 @@ def create_new_validation(seed, sustain_classes):
             (samples_sequence, samples_f, ml_subtype,
             prob_ml_subtype, ml_stage, prob_ml_stage,
             prob_subtype_stage) = sustain_model.run_sustain_algorithm()
+            likelihoods = summarise_likelihoods(
+                sustain_kwargs["output_folder"],
+                sustain_kwargs["dataset_name"],
+                sustain_kwargs["N_S_max"]
+            )
         finally:
             # Remove saved files
             # TODO: Can remove then when save functionality changed
@@ -87,6 +114,10 @@ def create_new_validation(seed, sustain_classes):
         # Save results
         df.to_csv(
             Path.cwd() / f"{sustain_class.__name__}_results.csv",
+            index=False
+        )
+        likelihoods.to_csv(
+            Path.cwd() / f"{sustain_class.__name__}_likelihoods.csv",
             index=False
         )
 

@@ -51,6 +51,11 @@ def test(seed, sustain_classes, time_flag):
             prob_subtype_stage) = sustain_model.run_sustain_algorithm()
             if time_flag:
                 end = time.time() - start
+            likelihoods = create_validation.summarise_likelihoods(
+                sustain_kwargs["output_folder"],
+                sustain_kwargs["dataset_name"],
+                sustain_kwargs["N_S_max"]
+            )
         finally:
             # Remove saved files
             # TODO: Can remove then when save functionality changed
@@ -66,6 +71,16 @@ def test(seed, sustain_classes, time_flag):
         results = load_results(sustain_class)
         # and compare against the results output by sustain
         assert_frame_equal(df, results)
+        # Compare the MCMC likelihoods, if reference values exist
+        likelihoods_path = Path.cwd() / f"{sustain_class.__name__}_likelihoods.csv"
+        if likelihoods_path.is_file():
+            assert_frame_equal(
+                likelihoods,
+                pd.read_csv(likelihoods_path, index_col=None),
+                check_exact=False, rtol=1e-6, atol=0
+            )
+        else:
+            print(f"No likelihoods file for {sustain_class.__name__}, skipping likelihood comparison")
         print(f"{sustain_class.__name__} test passed!")
         if time_flag:
             save_time(sustain_class, end)
@@ -87,11 +102,11 @@ def save_time(sustain_class, end):
         time_file.touch()
         df = pd.DataFrame()
 
-    df = df.append({
+    df = pd.concat([df, pd.DataFrame([{
         "date": time.strftime("%Y-%m-%d", time.gmtime()),
         "method": sustain_class.__name__,
         "time": end
-    }, ignore_index=True)
+    }])], ignore_index=True)
     df.to_csv(time_file, index=False)
 
 
