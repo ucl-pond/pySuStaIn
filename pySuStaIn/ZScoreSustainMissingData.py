@@ -209,7 +209,7 @@ class ZscoreSustainMissingData(AbstractSustain):
         # optimised likelihood calc - take log and only call np.exp once after loop
         sigmat                              = np.tile(self.std_biomarker_zscore, (M, 1))
 
-        factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
+        factor                              = np.log(1. / (np.sqrt(np.pi * 2.0) * sigmat))
         coeff                               = np.log(1. / float(N + 1))
 
         # original
