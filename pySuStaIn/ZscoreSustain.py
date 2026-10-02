@@ -241,6 +241,32 @@ class ZscoreSustain(AbstractSustain):
         return p_perm_k
 
 
+    def _get_event_bounds(self):
+        # For each event, the events of the same biomarker with the next lower and
+        # the next higher z-score (None if there is no such event). An event can
+        # only move between these two events in a sequence. They depend only on the
+        # model, so compute them once
+        if getattr(self, '_event_bounds', None) is None:
+            N                               = self.stage_zscore.shape[1]
+            events                          = np.array(range(N))
+            self._event_bounds              = []
+            for selected_event in range(N):
+                this_stage_zscore           = self.stage_zscore[0, selected_event]
+                selected_biomarker          = self.stage_biomarker_index[0, selected_event]
+                possible_zscores_biomarker  = self.stage_zscore[self.stage_biomarker_index == selected_biomarker]
+                min_filter                  = possible_zscores_biomarker < this_stage_zscore
+                max_filter                  = possible_zscores_biomarker > this_stage_zscore
+                lower_bound_event           = None
+                upper_bound_event           = None
+                if np.any(min_filter):
+                    min_zscore_bound        = max(possible_zscores_biomarker[min_filter])
+                    lower_bound_event       = events[((self.stage_zscore[0] == min_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                if np.any(max_filter):
+                    max_zscore_bound        = min(possible_zscores_biomarker[max_filter])
+                    upper_bound_event       = events[((self.stage_zscore[0] == max_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
+                self._event_bounds.append((lower_bound_event, upper_bound_event))
+        return self._event_bounds
+
     def _optimise_parameters(self, sustainData, S_init, f_init, rng):
         # Optimise the parameters of the SuStaIn model
 
@@ -275,24 +301,14 @@ class ZscoreSustain(AbstractSustain):
 
                 move_event_from             = current_location[selected_event]
 
-                this_stage_zscore           = self.stage_zscore[0, selected_event]
-                selected_biomarker          = self.stage_biomarker_index[0, selected_event]
-                possible_zscores_biomarker  = self.stage_zscore[self.stage_biomarker_index == selected_biomarker]
-
-                # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
-                min_filter                  = possible_zscores_biomarker < this_stage_zscore
-                max_filter                  = possible_zscores_biomarker > this_stage_zscore
-                events                      = np.array(range(N))
-                if np.any(min_filter):
-                    min_zscore_bound        = max(possible_zscores_biomarker[min_filter])
-                    min_zscore_bound_event  = events[((self.stage_zscore[0] == min_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
-                    move_event_to_lower_bound = current_location[min_zscore_bound_event] + 1
+                # events of the same biomarker with the next lower and next higher z-score
+                lower_bound_event, upper_bound_event = self._get_event_bounds()[selected_event]
+                if lower_bound_event is not None:
+                    move_event_to_lower_bound = current_location[lower_bound_event] + 1
                 else:
                     move_event_to_lower_bound = 0
-                if np.any(max_filter):
-                    max_zscore_bound        = min(possible_zscores_biomarker[max_filter])
-                    max_zscore_bound_event  = events[((self.stage_zscore[0] == max_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
-                    move_event_to_upper_bound = current_location[max_zscore_bound_event]
+                if upper_bound_event is not None:
+                    move_event_to_upper_bound = current_location[upper_bound_event]
                 else:
                     move_event_to_upper_bound = N
                     # FIXME: hack because python won't produce an array in range (N,N), while matlab will produce an array (N)... urgh
@@ -378,27 +394,16 @@ class ZscoreSustain(AbstractSustain):
                     current_location[current_sequence.astype(int)] = np.arange(N)
 
                     selected_event          = int(current_sequence[move_event_from])
-                    this_stage_zscore       = self.stage_zscore[0, selected_event]
-                    selected_biomarker      = self.stage_biomarker_index[0, selected_event]
-                    possible_zscores_biomarker = self.stage_zscore[self.stage_biomarker_index == selected_biomarker]
-
-                    # slightly different conditional check to matlab version to protect python from calling min,max on an empty array
-                    min_filter              = possible_zscores_biomarker < this_stage_zscore
-                    max_filter              = possible_zscores_biomarker > this_stage_zscore
-                    events                  = np.array(range(N))
-                    if np.any(min_filter):
-                        min_zscore_bound            = max(possible_zscores_biomarker[min_filter])
-                        min_zscore_bound_event      = events[((self.stage_zscore[0] == min_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
-                        move_event_to_lower_bound   = current_location[min_zscore_bound_event] + 1
+                    # events of the same biomarker with the next lower and next higher z-score
+                    lower_bound_event, upper_bound_event = self._get_event_bounds()[selected_event]
+                    if lower_bound_event is not None:
+                        move_event_to_lower_bound = current_location[lower_bound_event] + 1
                     else:
-                        move_event_to_lower_bound   = 0
-
-                    if np.any(max_filter):
-                        max_zscore_bound            = min(possible_zscores_biomarker[max_filter])
-                        max_zscore_bound_event      = events[((self.stage_zscore[0] == max_zscore_bound).astype(int) + (self.stage_biomarker_index[0] == selected_biomarker).astype(int)) == 2]
-                        move_event_to_upper_bound   = current_location[max_zscore_bound_event]
+                        move_event_to_lower_bound = 0
+                    if upper_bound_event is not None:
+                        move_event_to_upper_bound = current_location[upper_bound_event]
                     else:
-                        move_event_to_upper_bound   = N
+                        move_event_to_upper_bound = N
 
                     # FIXME: hack because python won't produce an array in range (N,N), while matlab will produce an array (N)... urgh
                     if move_event_to_lower_bound == move_event_to_upper_bound:
