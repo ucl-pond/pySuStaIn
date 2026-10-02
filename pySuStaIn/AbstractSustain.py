@@ -587,7 +587,12 @@ class AbstractSustain(ABC):
                     except:
                         prob_ml_subtype[i]  = this_prob_subtype[this_subtype[0][0]]
 
-            this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i])])
+            # A subject whose likelihood underflows to zero for every subtype
+            # and stage gets NaN probabilities; leave its subtype and stage as NaN
+            if np.isnan(ml_subtype[i, 0]):
+                continue
+
+            this_prob_stage                 = np.squeeze(prob_subtype_stage[i, :, int(ml_subtype[i, 0])])
             
             if (np.sum(np.isnan(this_prob_stage)) == 0):
                 # this_stage = 
