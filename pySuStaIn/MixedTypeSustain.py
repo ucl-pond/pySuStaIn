@@ -514,6 +514,12 @@ class MixedTypeSustain(AbstractSustain):
         f_val_mat = np.transpose(f_val_mat, (2, 1, 0))
         order_seq = rng.permutation(N_S)  # this will produce different random numbers to Matlab
 
+        # The likelihood of each candidate sequence only needs, for each subject,
+        # the sum over stages of each subtype's p_perm_k, weighted by f. Keep these
+        # M x N_S sums, so that a candidate costs O(M * N_S) and not O(M * N * N_S)
+        f_opt_vec = f_opt.reshape(N_S)
+        p_perm_k_stage_sum = np.sum(p_perm_k, 1)
+
         for s in order_seq:
             order_bio = rng.permutation(N)  # this will produce different random numbers to Matlab
             for i in order_bio:
@@ -555,7 +561,9 @@ class MixedTypeSustain(AbstractSustain):
                     possible_positions = np.arange(lower_bound, upper_bound)
                 possible_sequences = np.zeros((len(possible_positions), N))
                 possible_likelihood = np.zeros((len(possible_positions), 1))
-                possible_p_perm_k = np.zeros((M, N + 1, len(possible_positions)))
+                # keep only the p_perm_k of the best candidate so far, not of every
+                # candidate, which needs M x (N+1) x len(possible_positions) memory
+                best_p_perm_k = None
                 for index in range(len(possible_positions)):
                     current_sequence = S_opt[s]
 
@@ -567,20 +575,24 @@ class MixedTypeSustain(AbstractSustain):
                     new_sequence = np.concatenate([current_sequence[np.arange(move_event_to)], [selected_event], current_sequence[np.arange(move_event_to, N - 1)]])
                     possible_sequences[index, :] = new_sequence
 
-                    possible_p_perm_k[:, :, index] = self._calculate_likelihood_stage(sustainData, new_sequence)
+                    this_p_perm_k = self._calculate_likelihood_stage(sustainData, new_sequence)
 
-                    p_perm_k[:, :, s] = possible_p_perm_k[:, :, index]
-                    total_prob_stage = np.sum(p_perm_k * f_val_mat, 2)
-                    total_prob_subj = np.sum(total_prob_stage, 1)
+                    p_perm_k_stage_sum[:, s] = np.sum(this_p_perm_k, 1)
+                    total_prob_subj = p_perm_k_stage_sum @ f_opt_vec
                     possible_likelihood[index] = np.sum(np.log(total_prob_subj + 1e-250))
+
+                    # the first of equal maxima is selected below, so replace only on a strict increase
+                    if best_p_perm_k is None or possible_likelihood[index] > possible_likelihood[best_index]:
+                        best_index = index
+                        best_p_perm_k = this_p_perm_k
 
                 possible_likelihood = possible_likelihood.reshape(possible_likelihood.shape[0])
                 max_likelihood = max(possible_likelihood)
                 this_S = possible_sequences[possible_likelihood == max_likelihood, :]
                 this_S = this_S[0, :]
                 S_opt[s] = this_S
-                this_p_perm_k = possible_p_perm_k[:, :, possible_likelihood == max_likelihood]
-                p_perm_k[:, :, s] = this_p_perm_k[:, :, 0]
+                p_perm_k[:, :, s] = best_p_perm_k
+                p_perm_k_stage_sum[:, s] = np.sum(p_perm_k[:, :, s], 1)
 
             S_opt[s] = this_S
 
