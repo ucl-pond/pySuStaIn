@@ -855,7 +855,12 @@ class MixedTypeSustain(AbstractSustain):
 
                 this_samples_sequence = samples_sequence[subtype_order[subtype_idx], :, :].T
                 N = this_samples_sequence.shape[1]
-                confus_matrix = (this_samples_sequence == np.arange(N)[:, None, None]).sum(1) / this_samples_sequence.shape[0]
+                # event * N + position for each sample, in one integer array that is
+                # built in place and flattened in its memory order (no copies)
+                event_position = this_samples_sequence.astype(np.intp)
+                event_position *= N
+                event_position += np.arange(N)
+                confus_matrix = np.bincount(event_position.ravel(order='K'), minlength=N * N).reshape(N, N) / this_samples_sequence.shape[0]
                 confus_matrix_c = np.ones((N_bio, N, 3))
 
                 for j, score_mask in enumerate(score_masks):
