@@ -163,7 +163,7 @@ class MixedTypeSustain(AbstractSustain):
             ordinal_prob_nl, ordinal_prob_score, ordinal_score_vals, ordinal_biomarker_labels, # ordinal parameters
             event_prob_yes, event_prob_no, event_biomarker_labels, # event parameters
             N_startpoints, N_S_max, N_iterations_MCMC,
-            output_folder, dataset_name, use_parallel_startpoints, seed=None
+            output_folder, dataset_name, use_parallel_startpoints, seed=None, n_jobs=None
             ):
         """
         The initializer for the mixed (z-score + ordinal + event) implementation of AbstractSustain.
@@ -217,6 +217,9 @@ class MixedTypeSustain(AbstractSustain):
             Whether to parallelize the maximum likelihood loop.
         seed : int or None
             Random number seed.
+        n_jobs : int or None
+            Number of processes for parallel startpoints. Default: the number of
+            CPUs this process may use.
         """
         # ----- z-score inputs
         if zscore_data is not None and not np.all(zscore_data == 0):
@@ -347,7 +350,7 @@ class MixedTypeSustain(AbstractSustain):
         self.__sustainData = MixedTypeSustainData(zscore_data, combined_prob_nl, combined_prob_score, self.num_stages)
 
         # initialise abstract sustain
-        super().__init__(self.__sustainData, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, use_parallel_startpoints, seed)
+        super().__init__(self.__sustainData, N_startpoints, N_S_max, N_iterations_MCMC, output_folder, dataset_name, use_parallel_startpoints, seed, n_jobs)
 
         print("Init done for MixedTypeSustain")
 

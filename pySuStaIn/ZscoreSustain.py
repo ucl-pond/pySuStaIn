@@ -47,6 +47,18 @@ class ZScoreSustainData(AbstractSustainData):
     def reindex(self, index):
         return ZScoreSustainData(self.data[index,], self.__numStages)
 
+    def get_augmented_data(self, sigma):
+        # Cached [data / sigma, -0.5 * |data / sigma|^2, 1], used to compute
+        # the stage log-likelihoods of all subjects as one matrix product
+        key = sigma.tobytes()
+        if getattr(self, '_augmented_key', None) != key:
+            scaled                          = self.data / sigma
+            self._augmented_data            = np.hstack([scaled,
+                                                         -0.5 * np.sum(scaled * scaled, 1, keepdims=True),
+                                                         np.ones((scaled.shape[0], 1))])
+            self._augmented_key             = key
+        return self._augmented_data
+
 #*******************************************
 #An implementation of the AbstractSustain class with multiple events for each biomarker based on deviations from normality, measured in z-scores.
 #There are a fixed number of thresholds for each biomarker, specified at initialization of the ZscoreSustain object.
@@ -63,7 +75,8 @@ class ZscoreSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed=None):
+                 seed=None,
+                 n_jobs=None):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
         #   data                        - !important! needs to be (positive) z-scores!
@@ -81,6 +94,7 @@ class ZscoreSustain(AbstractSustain):
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
         #   seed                        - random number seed
+        #   n_jobs                      - number of processes for parallel startpoints. Default: the number of CPUs this process may use
 
         N                               = data.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -118,7 +132,8 @@ class ZscoreSustain(AbstractSustain):
                          output_folder,
                          dataset_name,
                          use_parallel_startpoints,
-                         seed)
+                         seed,
+                         n_jobs)
 
 
     def _initialise_sequence(self, sustainData, rng):
@@ -209,11 +224,8 @@ class ZscoreSustain(AbstractSustain):
 
         stage_value                         = 0.5 * point_value[:, :point_value.shape[1] - 1] + 0.5 * point_value[:, 1:]
 
-        M                                   = sustainData.getNumSamples()   #data_local.shape[0]
-        p_perm_k                            = np.zeros((M, N + 1))
-
         # optimised likelihood calc - take log and only call np.exp once after loop
-        sigmat = np.array(self.std_biomarker_zscore)
+        sigmat = np.array(self.std_biomarker_zscore, dtype=float)
 
         factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
         coeff                               = np.log(1. / float(N + 1))
@@ -234,9 +246,20 @@ class ZscoreSustain(AbstractSustain):
         # p_perm_k                            = np.exp(p_perm_k)
 
         # even faster - do in one go
-        x = (sustainData.data[:, :, None] - stage_value) / sigmat[None, :, None]
-        p_perm_k = coeff + np.sum(factor[None, :, None] - 0.5 * np.square(x), 1)
-        p_perm_k = np.exp(p_perm_k)
+        # x = (sustainData.data[:, :, None] - stage_value) / sigmat[None, :, None]
+        # p_perm_k = coeff + np.sum(factor[None, :, None] - 0.5 * np.square(x), 1)
+        # p_perm_k = np.exp(p_perm_k)
+
+        # fastest - expand sum_b ((d_b - v_b) / sigma_b)^2 = |d|^2 - 2 d.v + |v|^2,
+        # so that the log-likelihood of all subjects at all stages is one matrix
+        # product [d, -0.5 |d|^2, 1] @ [v; 1; c - 0.5 |v|^2]. This avoids the
+        # M x B x (N+1) temporaries, which are the bottleneck for large M
+        stage_value_scaled                  = stage_value / sigmat[:, None]
+        stage_value_augmented               = np.vstack([stage_value_scaled,
+                                                         np.ones((1, N + 1)),
+                                                         coeff + np.sum(factor) - 0.5 * np.sum(stage_value_scaled * stage_value_scaled, 0, keepdims=True)])
+        p_perm_k                            = sustainData.get_augmented_data(sigmat) @ stage_value_augmented
+        np.exp(p_perm_k, out=p_perm_k)
 
         return p_perm_k
 

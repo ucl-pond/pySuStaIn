@@ -62,7 +62,8 @@ class OrdinalSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed=None):
+                 seed=None,
+                 n_jobs=None):
         # The initializer for the scored events model implementation of AbstractSustain
         # Parameters:
         #   prob_nl                     - probability of negative/normal class for all subjects across all biomarkers 
@@ -79,6 +80,7 @@ class OrdinalSustain(AbstractSustain):
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
         #   seed                        - random number seed
+        #   n_jobs                      - number of processes for parallel startpoints. Default: the number of CPUs this process may use
 
         N                               = prob_nl.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -122,7 +124,8 @@ class OrdinalSustain(AbstractSustain):
                          output_folder,
                          dataset_name,
                          use_parallel_startpoints,
-                         seed)
+                         seed,
+                         n_jobs)
 
 
     def _initialise_sequence(self, sustainData, rng):
