@@ -37,6 +37,23 @@ class ZScoreSustainData(AbstractSustainData):
     def reindex(self, index):
         return ZScoreSustainData(self.data[index,], self.__numStages)
 
+    def get_augmented_data(self, sigma, factor, log_p_missingdata):
+        # Cached [x0, observed, const, 1], where x0 is data / sigma with missing
+        # values set to 0, observed is 1 where a value is present, and const is the
+        # part of each subject's log-likelihood that does not depend on the stage.
+        # Used to compute the stage log-likelihoods of all subjects as one matrix product
+        key = (sigma.tobytes(), factor.tobytes(), log_p_missingdata.tobytes())
+        if getattr(self, '_augmented_key', None) != key:
+            observed                        = ~np.isnan(self.data)
+            scaled                          = np.where(observed, self.data / sigma, 0.)
+            const                           = -0.5 * np.sum(scaled * scaled, 1) + observed @ factor + (~observed) @ log_p_missingdata
+            self._augmented_data            = np.hstack([scaled,
+                                                         observed.astype(float),
+                                                         const[:, None],
+                                                         np.ones((scaled.shape[0], 1))])
+            self._augmented_key             = key
+        return self._augmented_data
+
 #*******************************************
 #An implementation of the AbstractSustain class with multiple events for each biomarker based on deviations from normality, measured in z-scores.
 #There are a fixed number of thresholds for each biomarker, specified at initialization of the ZscoreSustainMissingData object.
@@ -53,7 +70,8 @@ class ZscoreSustainMissingData(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed=None):
+                 seed=None,
+                 n_jobs=None):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
         #   data                        - !important! needs to be (positive) z-scores!
@@ -71,6 +89,7 @@ class ZscoreSustainMissingData(AbstractSustain):
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
         #   seed                        - random number seed
+        #   n_jobs                      - number of processes for parallel startpoints. Default: the number of CPUs this process may use
 
         N                               = data.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -108,7 +127,8 @@ class ZscoreSustainMissingData(AbstractSustain):
                          output_folder,
                          dataset_name,
                          use_parallel_startpoints,
-                         seed)
+                         seed,
+                         n_jobs)
 
 
     def _initialise_sequence(self, sustainData, rng):
@@ -199,47 +219,29 @@ class ZscoreSustainMissingData(AbstractSustain):
 
         stage_value                         = 0.5 * point_value[:, :point_value.shape[1] - 1] + 0.5 * point_value[:, 1:]
 
-        M                                   = sustainData.getNumSamples()   #data_local.shape[0]
-        p_perm_k                            = np.zeros((M, N + 1))
-        
-        # Missing data
-        p_missingdata = np.ones((1,B))/ (self.max_biomarker_zscore-self.min_biomarker_zscore)
-        p_missingdata = np.tile(p_missingdata, (M, 1))
+        # Missing data: a missing value has the uniform density p_missingdata over
+        # the z-score range, so its log-likelihood is log(p_missingdata); an
+        # observed value has the Gaussian log-likelihood
+        log_p_missingdata                   = np.log(1. / (np.asarray(self.max_biomarker_zscore, dtype=float) - np.asarray(self.min_biomarker_zscore, dtype=float)))
 
         # optimised likelihood calc - take log and only call np.exp once after loop
-        sigmat                              = np.tile(self.std_biomarker_zscore, (M, 1))
+        sigma                               = np.array(self.std_biomarker_zscore, dtype=float)
 
-        factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigmat)
+        factor                              = np.log(1. / np.sqrt(np.pi * 2.0) * sigma)
         coeff                               = np.log(1. / float(N + 1))
 
-        # original
-        """
-        for j in range(N+1):
-            x                   = (data-np.tile(stage_value[:,j],(M,1)))/sigmat
-            p_perm_k[:,j]       = coeff+np.sum(factor-.5*x*x,1)
-        
-        # faster - do the tiling once
-        stage_value_tiled                   = np.tile(stage_value, (M, 1))
-        N_biomarkers                        = stage_value.shape[0]
-        for j in range(N + 1):
-            stage_value_tiled_j             = stage_value_tiled[:, j].reshape(M, N_biomarkers)
-            x                               = (sustainData.data - stage_value_tiled_j) / sigmat  #(data_local - stage_value_tiled_j) / sigmat
-            p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(x), 1)
-        p_perm_k                            = np.exp(p_perm_k)
-        """
-        
-        # Missing data
-        stage_value_tiled                   = np.tile(stage_value, (M, 1))
-        N_biomarkers                        = stage_value.shape[0]
-        for j in range(N + 1):
-            stage_value_tiled_j             = stage_value_tiled[:, j].reshape(M, N_biomarkers)
-            x_hasdata                       = (sustainData.data - stage_value_tiled_j) / sigmat  #(data_local - stage_value_tiled_j) / sigmat
-            
-            p = np.log(p_missingdata);
-            p[~np.isnan(sustainData.data)] = x_hasdata[~np.isnan(sustainData.data)];
-
-            p_perm_k[:, j]                  = coeff + np.sum(factor - .5 * np.square(p), 1) 
-        p_perm_k                            = np.exp(p_perm_k)
+        # Expand sum_b over observed values of ((d_b - v_b) / sigma_b)^2 as
+        # sum_b observed_b * (d_b^2 - 2 d_b v_b + v_b^2), so that the log-likelihood
+        # of all subjects at all stages is one matrix product
+        # [x0, observed, const, 1] @ [v; -0.5 v^2; 1; coeff]. This avoids the
+        # M x B temporaries for each stage, which are the bottleneck for large M
+        stage_value_scaled                  = stage_value / sigma[:, None]
+        stage_value_augmented               = np.vstack([stage_value_scaled,
+                                                         -0.5 * stage_value_scaled * stage_value_scaled,
+                                                         np.ones((1, N + 1)),
+                                                         np.full((1, N + 1), coeff)])
+        p_perm_k                            = sustainData.get_augmented_data(sigma, factor, log_p_missingdata) @ stage_value_augmented
+        np.exp(p_perm_k, out=p_perm_k)
 
         return p_perm_k
 

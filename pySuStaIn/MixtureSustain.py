@@ -65,7 +65,8 @@ class MixtureSustain(AbstractSustain):
                  dataset_name,
                  use_parallel_startpoints,
                  use_dp=False,
-                 seed=None):
+                 seed=None,
+                 n_jobs=None):
         # The initializer for the mixture model based events implementation of AbstractSustain
         # Parameters:
         #   L_yes                       - probability of positive class for all subjects across all biomarkers (from mixture modelling)
@@ -81,6 +82,7 @@ class MixtureSustain(AbstractSustain):
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
         #   use_dp                      - boolean for whether or not to speed up optimise_parameters via dynamic programming
         #   seed                        - random number seed
+        #   n_jobs                      - number of processes for parallel startpoints. Default: the number of CPUs this process may use
 
         N                               =  L_yes.shape[1] # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -98,7 +100,8 @@ class MixtureSustain(AbstractSustain):
                          output_folder,
                          dataset_name,
                          use_parallel_startpoints,
-                         seed)
+                         seed,
+                         n_jobs)
 
     def _initialise_sequence(self, sustainData, rng):
         # Randomly initialises a sequence

@@ -63,7 +63,8 @@ class ZscoreSustain(AbstractSustain):
                  output_folder,
                  dataset_name,
                  use_parallel_startpoints,
-                 seed=None):
+                 seed=None,
+                 n_jobs=None):
         # The initializer for the z-score based events implementation of AbstractSustain
         # Parameters:
         #   data                        - !important! needs to be (positive) z-scores!
@@ -81,6 +82,7 @@ class ZscoreSustain(AbstractSustain):
         #   dataset_name                - for naming pickle files
         #   use_parallel_startpoints    - boolean for whether or not to parallelize the maximum likelihood loop
         #   seed                        - random number seed
+        #   n_jobs                      - number of processes for parallel startpoints. Default: the number of CPUs this process may use
 
         N                               = data.shape[1]  # number of biomarkers
         assert (len(biomarker_labels) == N), "number of labels should match number of biomarkers"
@@ -118,7 +120,8 @@ class ZscoreSustain(AbstractSustain):
                          output_folder,
                          dataset_name,
                          use_parallel_startpoints,
-                         seed)
+                         seed,
+                         n_jobs)
 
 
     def _initialise_sequence(self, sustainData, rng):
