@@ -462,7 +462,7 @@ class OrdinalSustain(AbstractSustain):
         num_scores = np.unique(stage_score)
         N_z = len(num_scores)
         # Extract which biomarkers have which zscores/stages
-        stage_biomarker_index = np.tile(np.arange(N_bio), (N_z,))
+        stage_biomarker_index = np.tile(np.arange(N_bio), (score_vals.shape[1],))
         stage_biomarker_index = stage_biomarker_index[IX_select]
         # Warn user of reordering if labels and order given
         if biomarker_labels is not None and biomarker_order is not None:
@@ -490,10 +490,12 @@ class OrdinalSustain(AbstractSustain):
         # Z-score colour definition
         if cmap == "original":
             # Hard-coded colours: hooray!
-            colour_mat = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1], [0.5, 0, 1], [0, 1, 1], [0, 1, 0.5]])[:N_z]
-            # We only have up to 5 default colours, so double-check
-            if colour_mat.shape[0] > N_z:
+            colour_mat = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1], [0.5, 0, 1], [0, 1, 1], [0, 1, 0.5], [1, 0.5, 0], [0, 0.5, 1], [0.5, 1, 0], [1, 0, 0.5]])
+            # Each colour must have at least one zero channel, as the certainty of an
+            # event is shown by removing the channels that are zero for its colour
+            if N_z > colour_mat.shape[0]:
                 raise ValueError(f"Colours are only defined for {len(colour_mat)} z-scores!")
+            colour_mat = colour_mat[:N_z]
         else:
             raise NotImplementedError
         '''
@@ -582,11 +584,6 @@ class OrdinalSustain(AbstractSustain):
                         )
                     ] -= np.tile(
                         confus_matrix_score.reshape((stage_score==z).sum(), N, 1),
-                        (1, 1, alter_level.sum())
-                    )
-                    # Subtract the certainty for this colour
-                    confus_matrix_c[:, :, alter_level] -= np.tile(
-                        confus_matrix_score.reshape(N_bio, N, 1),
                         (1, 1, alter_level.sum())
                     )
                 if subtype_titles is not None:
@@ -711,7 +708,7 @@ class OrdinalSustain(AbstractSustain):
 
         IX_select = np.nonzero(stage_zscore)[0]
         stage_zscore = stage_zscore[IX_select]
-        num_zscores = Z_vals.shape[0]
+        num_zscores = Z_vals.shape[1]
 
         stage_biomarker_index = np.tile(np.arange(num_biomarkers), (num_zscores,))
         stage_biomarker_index = stage_biomarker_index[IX_select]

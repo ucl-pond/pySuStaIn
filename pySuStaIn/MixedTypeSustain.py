@@ -786,7 +786,7 @@ class MixedTypeSustain(AbstractSustain):
         stage_score = stage_score[IX_select][None, :]
         num_scores = np.unique(stage_score)
         N_z = len(num_scores)
-        stage_biomarker_index = np.tile(np.arange(N_bio), (N_z,))
+        stage_biomarker_index = np.tile(np.arange(N_bio), (score_vals.shape[1],))
         stage_biomarker_index = stage_biomarker_index[IX_select]
 
         if biomarker_labels is not None and biomarker_order is not None:
@@ -808,9 +808,12 @@ class MixedTypeSustain(AbstractSustain):
             assert len(subtype_titles) == N_S
 
         if cmap == "original":
-            colour_mat = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1], [0.5, 0, 1], [0, 1, 1], [0, 1, 0.5]])[:N_z]
-            if colour_mat.shape[0] > N_z:
+            colour_mat = np.array([[1, 0, 0], [1, 0, 1], [0, 0, 1], [0.5, 0, 1], [0, 1, 1], [0, 1, 0.5], [1, 0.5, 0], [0, 0.5, 1], [0.5, 1, 0], [1, 0, 0.5]])
+            # Each colour must have at least one zero channel, as the certainty of an
+            # event is shown by removing the channels that are zero for its colour
+            if N_z > colour_mat.shape[0]:
                 raise ValueError(f"Colours are only defined for {len(colour_mat)} z-scores!")
+            colour_mat = colour_mat[:N_z]
         else:
             raise NotImplementedError
 
